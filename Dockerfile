@@ -93,13 +93,13 @@ RUN mkdir /opt/samtools && \
 ### Repeat Masker and dependencies
 RUN mkdir /opt/trf && \
 	cd /opt/trf && \
-	wget http://tandem.bu.edu/trf/downloads/trf407b.linux64 && \
+	wget https://github.com/Benson-Genomics-Lab/TRF/releases/download/v4.09.1/trf409.linux64 && \
 	chmod +x trf*.linux64 && \
 	ln -s trf*.linux64 trf
 # Turns out we need makeblastdb as well as rmblastn (https://github.com/PapenfussLab/gridss/issues/535)
 RUN mkdir /opt/rmblast && \
 	cd /opt/rmblast && \
-	wget http://www.repeatmasker.org/rmblast-2.11.0+-x64-linux.tar.gz && \
+	wget https://www.repeatmasker.org/rmblast/rmblast-2.14.1+-x64-linux.tar.gz && \
 	tar --no-anchored --strip-components 2 -xvzf rmblast-2.11.0+-x64-linux.tar.gz rmblastn makeblastdb && \
 	rm rmblast-2.11.0+-x64-linux.tar.gz
 RUN cd /opt/ && \
