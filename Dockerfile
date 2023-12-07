@@ -20,10 +20,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 	make \
 	wget \
 	libomp-dev \
-    python3 \
     python3-pip \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip3 install pysam
+	&& rm -rf /var/lib/apt/lists/* \
+	&& pip3 install pysam
 
 # compile gridsstools
 FROM gridss_c_build_environment AS gridss_builder_c
