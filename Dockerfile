@@ -20,7 +20,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 	make \
 	wget \
 	libomp-dev \
-	&& rm -rf /var/lib/apt/lists/*
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install pysam
 
 # compile gridsstools
 FROM gridss_c_build_environment AS gridss_builder_c
@@ -137,12 +140,6 @@ RUN cd /opt/RepeatMasker && \
 ENV R_INSTALL_STAGED=false
 RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/");install.packages(c( "tidyverse", "assertthat", "testthat", "randomForest", "stringdist", "stringr", "argparser", "R.cache", "BiocManager", "Rcpp", "blob", "RSQLite" ))'
 RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/");BiocManager::install(ask=FALSE, pkgs=c( "copynumber", "StructuralVariantAnnotation", "VariantAnnotation", "rtracklayer", "BSgenome", "Rsamtools", "biomaRt", "org.Hs.eg.db", "TxDb.Hsapiens.UCSC.hg19.knownGene", "TxDb.Hsapiens.UCSC.hg38.knownGene" ))'
-# Python packages
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    python3-pip \
-    pysam \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip3 install pysam
 # Install GRIDSS
 ARG GRIDSS_VERSION
 ENV GRIDSS_VERSION=${GRIDSS_VERSION}
