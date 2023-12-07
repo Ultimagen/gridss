@@ -100,8 +100,8 @@ RUN mkdir /opt/trf && \
 RUN mkdir /opt/rmblast && \
 	cd /opt/rmblast && \
 	wget https://www.repeatmasker.org/rmblast/rmblast-2.14.1+-x64-linux.tar.gz && \
-	tar --no-anchored --strip-components 2 -xvzf rmblast-2.11.0+-x64-linux.tar.gz rmblastn makeblastdb && \
-	rm rmblast-2.11.0+-x64-linux.tar.gz
+	tar --no-anchored --strip-components 2 -xvzf rmblast-2.14.1+-x64-linux.tar.gz rmblastn makeblastdb && \
+	rm rmblast-2.14.1+-x64-linux.tar.gz
 RUN cd /opt/ && \
 	wget http://www.repeatmasker.org/RepeatMasker/RepeatMasker-4.1.2-p1.tar.gz && \
 	tar zxf RepeatMasker-*.tar.gz && \
