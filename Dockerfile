@@ -172,4 +172,4 @@ WORKDIR /data/
 FROM scratch AS gridss_export_build_artefacts
 ARG GRIDSS_VERSION
 COPY --from=gridss /opt/gridss/* /
-
+SHELL ["/bin/bash", "-c"]
