@@ -160,6 +160,8 @@ COPY scripts/gridss \
 	scripts/virusbreakend-build \
 	scripts/gridss.config.R \
 	scripts/libgridss.R \
+	scripts/link_breakpoints.R \
+	scripts/ua_realignment.py \
 	/opt/gridss/
 RUN chmod +x /opt/gridss/* && \
 	chmod -x /opt/gridss/*.R
