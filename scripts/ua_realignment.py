@@ -3,10 +3,10 @@ import pysam
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Revert supplementary UA alignments with low mapping quality')
-parser.add_argument('before', help='The file before UA')
-parser.add_argument('after', help='The file after UA')
-parser.add_argument('output', help='The output realigned file')
-parser.add_argument('min_mapping_quality', help='low mapping quality threshold', default=60)
+parser.add_argument('--before', required=True, help='The file before UA')
+parser.add_argument('--after', required=True, help='The file after UA')
+parser.add_argument('--output', required=True, help='The output realigned file')
+parser.add_argument('--min_mapping_quality', type=int, default=60, help='low mapping quality threshold')
 args = parser.parse_args()
 
 # Open BAM files - before and after UA alignments
