@@ -79,6 +79,22 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 		python3-h5py \
 		rsync \
 		curl \
+		libxml2-dev \
+		libcairo2-dev \
+		libgit2-dev \
+		default-libmysqlclient-dev \
+		libpq-dev \
+		libsasl2-dev \
+		libsqlite3-dev \
+		libssh2-1-de \
+		libxtst6 \
+		libharfbuzz-dev \
+		libfribidi-dev \
+		libfreetype6-dev \
+		libpng-dev \
+		libtiff5-dev \
+		libjpeg-dev \
+		unixodbc-dev
 	&& rm -rf /var/lib/apt/lists/*
 # samtools needs to be installed from source since the OS package verion is too old
 RUN mkdir /opt/samtools && \
