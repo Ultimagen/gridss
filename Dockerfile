@@ -86,7 +86,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 		libpq-dev \
 		libsasl2-dev \
 		libsqlite3-dev \
-		libssh2-1-de \
+		libssh2-1-dev \
 		libxtst6 \
 		libharfbuzz-dev \
 		libfribidi-dev \
