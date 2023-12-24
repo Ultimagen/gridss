@@ -20,7 +20,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 	make \
 	wget \
 	libomp-dev \
-	tabix \
     python3-pip \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& pip3 install pysam
@@ -96,6 +95,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 		libtiff5-dev \
 		libjpeg-dev \
 		unixodbc-dev \
+		tabix \
 	&& rm -rf /var/lib/apt/lists/*
 # samtools needs to be installed from source since the OS package verion is too old
 RUN mkdir /opt/samtools && \
