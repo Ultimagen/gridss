@@ -13,6 +13,7 @@ import htsjdk.samtools.SamReader;
 import htsjdk.samtools.SamReaderFactory;
 import htsjdk.samtools.reference.ReferenceSequenceFile;
 import htsjdk.samtools.reference.ReferenceSequenceFileFactory;
+import java.io.FileOutputStream;
 import htsjdk.samtools.util.IOUtil;
 import htsjdk.samtools.util.Log;
 import org.apache.commons.configuration.ConfigurationException;
@@ -21,7 +22,10 @@ import picard.cmdline.CommandLineProgram;
 import picard.cmdline.StandardOptionDefinitions;
 
 import java.io.File;
+import java.io.FileWriter;
+import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutionException;
@@ -29,11 +33,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import htsjdk.samtools.*;
+import htsjdk.samtools.cram.ref.CRAMReferenceSource;
+import htsjdk.samtools.cram.ref.ReferenceSource;
+import htsjdk.samtools.seekablestream.SeekableFileStream;
+import htsjdk.samtools.seekablestream.SeekableStream;
+import java.io.OutputStream;
 
 public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommandLineProgram {
 	private static final Log log = Log.getInstance(MultipleSamFileCommandLineProgram.class);
-	@Argument(shortName=StandardOptionDefinitions.INPUT_SHORT_NAME, doc="Coordinate-sorted input BAM file.")
+	@Argument(shortName=StandardOptionDefinitions.INPUT_SHORT_NAME, doc="Coordinate-sorted input BAM file.", optional=true)
     public List<File> INPUT;
+
+	@Argument(doc="Supply category instead of empty input file", optional=true)
+	public List<String> EMPTY_CATEGORIES;
 	//@Argument(shortName="IN", doc="Name-sorted input BAM file. This is required for if multiple alignment are reported for each read.", optional=true)
     //public List<File> INPUT_NAME_SORTED;
 	@Argument(doc="Input label. Variant calling evidence breakdowns are reported for each label."
@@ -109,6 +122,64 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 	    				getOffset(INPUT_MIN_FRAGMENT_SIZE, i, 0),
 	    				getOffset(INPUT_MAX_FRAGMENT_SIZE, i, 0)));
 	    	}
+			for (int i = 0; i < EMPTY_CATEGORIES.size(); i++) {
+				// in case we do not supply INPUT files, we can supply categories, and then we create an empty bam file for each category.
+				// in that way, the code can still run by there is no need to create empty bam file out of the code
+				File newFile = new File(WORKING_DIR,getOffset(EMPTY_CATEGORIES, i, null)+".bam");
+				File indexFile = new File(WORKING_DIR,getOffset(EMPTY_CATEGORIES, i, null)+".bam.bai");
+				// Create a SAM file header with the specified content of first line, RG and some SQ lines
+				SAMFileHeader header = new SAMFileHeader();
+				header.setSortOrder(SAMFileHeader.SortOrder.coordinate);
+				header.setAttribute("version","1.6");
+				header.setAttribute("GO", "query");
+				// Unique RG id
+				SAMReadGroupRecord rg = new SAMReadGroupRecord(String.format("RG%d", i + 1));
+				// Set the sample name (SM tag) to category name
+				rg.setSample(getOffset(EMPTY_CATEGORIES, i, null));
+				header.addReadGroup(rg);
+
+				// add some SQ lines
+				SAMSequenceRecord seqRecord1 = new SAMSequenceRecord("chr1", 248956422); // Example for chromosome 1
+				SAMSequenceRecord seqRecord2 = new SAMSequenceRecord("chr2", 242193529); // Example for chromosome 2
+
+				header.addSequence(seqRecord1);
+				header.addSequence(seqRecord2);
+
+				// Create the CRAM file with the specified header
+				SamReader reader = SamReaderFactory.makeDefault().open(newFile);
+				BAMIndexer.createIndex(reader, indexFile);
+				// add samEvidence as we doo in INPUT files - with the empty file and the category
+				samEvidence.add(constructSamEvidenceSource(
+						newFile,
+						null, // getOffset(INPUT_NAME_SORTED, i, null),
+						getOffset(EMPTY_CATEGORIES, i, null),
+						0,
+						0));
+				try {
+					// Create the file. If the file already exists, this method returns false.
+					boolean fileCreated = newFile.createNewFile();
+					if (fileCreated) {
+						System.out.println("Empty category file created successfully: " + newFile.getAbsolutePath());
+					} else {
+						System.out.println("Empty category file already exists: " + newFile.getAbsolutePath());
+					}
+				} catch (IOException e) {
+					// Handle the situation that the file could not be created (e.g., no permissions, path doesn't exist, etc.)
+					e.printStackTrace();
+				}
+				try {
+					// Create the index file. If the file already exists, this method returns false.
+					boolean fileCreated = indexFile.createNewFile();
+					if (fileCreated) {
+						System.out.println("Empty category index file created successfully: " + indexFile.getAbsolutePath());
+					} else {
+						System.out.println("Empty category index file already exists: " + indexFile.getAbsolutePath());
+					}
+				} catch (IOException e) {
+					// Handle the situation that the file could not be created (e.g., no permissions, path doesn't exist, etc.)
+					e.printStackTrace();
+				}
+			}
     	}
     	return samEvidence;
     }
@@ -234,9 +305,10 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 		if (WORKER_THREADS < 1) {
 			return new String[] { "WORKER_THREADS must be at least one." };
 		}
-		if (INPUT == null || INPUT.size() == 0) {
-			return new String[] { "No INPUT files specified." };
-    	}
+		// we made input files as optional
+//		if (INPUT == null || INPUT.size() == 0) {
+//			return new String[] { "No INPUT files specified." };
+//    	}
 		//if (INPUT_NAME_SORTED != null && INPUT_NAME_SORTED.size() > 0 && INPUT_NAME_SORTED.size() != INPUT.size()) {
     	//	return new String[] { "INPUT_NAME_SORTED must omitted or specified for every INPUT." };
     	//}
