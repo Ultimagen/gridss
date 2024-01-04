@@ -92,7 +92,7 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
     	if (file.exists() && getContext().getConfig().useReadGroupSampleNameCategoryLabel) {
     		try (SamReader reader = SamReaderFactory.makeDefault().referenceSequence(REFERENCE_SEQUENCE).open(file)) {
     			SAMFileHeader header = reader.getFileHeader();
-    			if (header.getReadGroups().size() == 1) {
+    			if (header.getReadGroups().stream().map(SAMReadGroupRecord::getSample).distinct().count() == 1) {
     				String sampleName = header.getReadGroups().get(0).getSample();
     				if (sampleName != null && sampleName.length() > 0) {
     					label = sampleName;
