@@ -287,13 +287,13 @@ public class SAMEvidenceSource extends EvidenceSource {
 				Path newLink = Paths.get(svFile.getPath());        // The path for the hard link
 
 				Files.createLink(newLink, existingFile);
-				System.out.println("Hard link created successfully for input file");
+				log.debug("Hard link created successfully for input file");
 
 				Path existingIndexFile = Paths.get(getFile().getPath()+".bai");  // The existing file
 				Path newIndexLink = Paths.get(svFile.getPath()+".bai");        // The path for the hard link
 
 				Files.createLink(newIndexLink, existingIndexFile);
-				System.out.println("Hard link created successfully for index file");
+				log.debug("Hard link created successfully for index file");
 			} catch (IOException e) {
 				// Handle the possibility of an IOException
 				e.printStackTrace();

@@ -42,7 +42,7 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 	@Argument(shortName=StandardOptionDefinitions.INPUT_SHORT_NAME, doc="Coordinate-sorted input BAM file.", optional=true)
     public List<File> INPUT;
 
-	@Argument(doc="Supply category instead of empty input file", optional=true)
+	@Argument(doc="Supply list of sample names in the same order as in the assembly output instead of raw reads file to skip generation of candidates from the raw reads file", optional=true)
 	public List<String> EMPTY_CATEGORIES;
 	//@Argument(shortName="IN", doc="Name-sorted input BAM file. This is required for if multiple alignment are reported for each read.", optional=true)
     //public List<File> INPUT_NAME_SORTED;
@@ -121,12 +121,12 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 	    	}
 			for (int i = 0; i < EMPTY_CATEGORIES.size(); i++) {
 				// in case we do not supply INPUT files, we can supply categories, and then we create an empty bam file for each category.
-				// in that way, the code can still run by there is no need to create empty bam file out of the code
-				File newFile = new File(WORKING_DIR,getOffset(EMPTY_CATEGORIES, i, null)+".bam");
-				File indexFile = new File(WORKING_DIR,getOffset(EMPTY_CATEGORIES, i, null)+".bam.bai");
+				// in that way, the code can still run without generating candidates from the raw reads
+				String category_empty_filename = "categoty_empty_file." + getOffset(EMPTY_CATEGORIES, i, null)+".bam";
+				File newFile = new File(WORKING_DIR, category_empty_filename);
+				File indexFile = new File(WORKING_DIR,category_empty_filename + ".bai");
 				// Create a SAM file header with the specified content of first line, RG and some SQ lines
 				SAMFileHeader header = new SAMFileHeader();
-				header.setAttribute("GO", "query");
 				header.setSortOrder(SAMFileHeader.SortOrder.coordinate);
 				// Unique RG id
 				SAMReadGroupRecord rg = new SAMReadGroupRecord(String.format("RG%d", i + 1));
@@ -142,7 +142,7 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 					header.addSequence(sequenceRecord);
 				}
 
-				// Create the CRAM file with the specified header
+				// Create the BAM file with the specified header
 				try (SAMFileWriter writer = new SAMFileWriterFactory().makeBAMWriter(header, true, newFile)) {
 					// No SAMRecords are added, resulting in an empty BAM (except for the header)
 					// The writer is automatically closed at the end of this block.
@@ -295,10 +295,6 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 		if (WORKER_THREADS < 1) {
 			return new String[] { "WORKER_THREADS must be at least one." };
 		}
-		// we made input files as optional
-//		if (INPUT == null || INPUT.size() == 0) {
-//			return new String[] { "No INPUT files specified." };
-//    	}
 		//if (INPUT_NAME_SORTED != null && INPUT_NAME_SORTED.size() > 0 && INPUT_NAME_SORTED.size() != INPUT.size()) {
     	//	return new String[] { "INPUT_NAME_SORTED must omitted or specified for every INPUT." };
     	//}
