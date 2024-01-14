@@ -78,6 +78,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           provenance: false
+          target: gridss
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.IMAGE }}:${{ inputs.image-tag || steps.set-tag.outputs.imageTag }}
