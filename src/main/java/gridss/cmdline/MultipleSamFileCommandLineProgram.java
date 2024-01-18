@@ -22,10 +22,7 @@ import picard.cmdline.CommandLineProgram;
 import picard.cmdline.StandardOptionDefinitions;
 
 import java.io.File;
-import java.io.FileWriter;
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutionException;
@@ -42,8 +39,8 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 	@Argument(shortName=StandardOptionDefinitions.INPUT_SHORT_NAME, doc="Coordinate-sorted input BAM file.", optional=true)
     public List<File> INPUT;
 
-	@Argument(doc="Supply list of sample names in the same order as in the assembly output instead of raw reads file to skip generation of candidates from the raw reads file", optional=true)
-	public List<String> EMPTY_CATEGORIES;
+	@Argument(doc="Supply list of sample names in the same order as in the assembly output, instead of INPUT files. This will skip generating candidates from the INPUT file, only from the assembly", optional=true)
+	public List<String> SAMPLE_NAMES;
 	//@Argument(shortName="IN", doc="Name-sorted input BAM file. This is required for if multiple alignment are reported for each read.", optional=true)
     //public List<File> INPUT_NAME_SORTED;
 	@Argument(doc="Input label. Variant calling evidence breakdowns are reported for each label."
@@ -119,10 +116,10 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 	    				getOffset(INPUT_MIN_FRAGMENT_SIZE, i, 0),
 	    				getOffset(INPUT_MAX_FRAGMENT_SIZE, i, 0)));
 	    	}
-			for (int i = 0; i < EMPTY_CATEGORIES.size(); i++) {
+			for (int i = 0; i < SAMPLE_NAMES.size(); i++) {
 				// in case we do not supply INPUT files, we can supply categories, and then we create an empty bam file for each category.
 				// in that way, the code can still run without generating candidates from the raw reads
-				String category_empty_filename = "categoty_empty_file." + getOffset(EMPTY_CATEGORIES, i, null)+".bam";
+				String category_empty_filename = "categoty_empty_file." + getOffset(SAMPLE_NAMES, i, null)+".bam";
 				File newFile = new File(WORKING_DIR, category_empty_filename);
 				File indexFile = new File(WORKING_DIR,category_empty_filename + ".bai");
 				// Create a SAM file header with the specified content of first line, RG and some SQ lines
@@ -131,7 +128,7 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 				// Unique RG id
 				SAMReadGroupRecord rg = new SAMReadGroupRecord(String.format("RG%d", i + 1));
 				// Set the sample name (SM tag) to category name
-				rg.setSample(getOffset(EMPTY_CATEGORIES, i, null));
+				rg.setSample(getOffset(SAMPLE_NAMES, i, null));
 				header.addReadGroup(rg);
 
 				// add some SQ lines
@@ -166,7 +163,7 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 				samEvidence.add(constructSamEvidenceSource(
 						newFile,
 						null, // getOffset(INPUT_NAME_SORTED, i, null),
-						getOffset(EMPTY_CATEGORIES, i, null),
+						getOffset(SAMPLE_NAMES, i, null),
 						0,
 						0));
 			}
