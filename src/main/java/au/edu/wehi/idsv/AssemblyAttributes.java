@@ -223,9 +223,9 @@ public class AssemblyAttributes {
 	private Stream<AssemblyEvidenceSupport> filterSupport(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
 		Stream<AssemblyEvidenceSupport> stream = getSupport(aes).stream();
 		if (assemblyContigOffset != null) {
-			stream = stream.filter(s -> Range.range(s.getAssemblyContigOffset().lowerEndpoint()+5,
+			stream = stream.filter(s -> Range.range(Math.min(s.getAssemblyContigOffset().lowerEndpoint()+5,s.getAssemblyContigOffset().upperEndpoint()-5),
 					s.getAssemblyContigOffset().lowerBoundType(),
-					Math.max(s.getAssemblyContigOffset().upperEndpoint()-5,s.getAssemblyContigOffset().lowerEndpoint()),
+					Math.max(s.getAssemblyContigOffset().upperEndpoint()-5,s.getAssemblyContigOffset().lowerEndpoint()+5),
 					s.getAssemblyContigOffset().upperBoundType()).isConnected(assemblyContigOffset));
 		}
 		if (supportingCategories != null) {
