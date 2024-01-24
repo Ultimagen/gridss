@@ -13,6 +13,7 @@ import htsjdk.samtools.util.Log;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import com.google.common.collect.Range;
 
 public class AssemblyAttributes {
 	private static final Log log = Log.getInstance(AssemblyAttributes.class);
@@ -222,7 +223,10 @@ public class AssemblyAttributes {
 	private Stream<AssemblyEvidenceSupport> filterSupport(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
 		Stream<AssemblyEvidenceSupport> stream = getSupport(aes).stream();
 		if (assemblyContigOffset != null) {
-			stream = stream.filter(s -> s.getAssemblyContigOffset().isConnected(assemblyContigOffset));
+			stream = stream.filter(s -> Range.range(s.getAssemblyContigOffset().lowerEndpoint()+5,
+					s.getAssemblyContigOffset().lowerBoundType(),
+					Math.max(s.getAssemblyContigOffset().upperEndpoint()-5,s.getAssemblyContigOffset().lowerEndpoint()),
+					s.getAssemblyContigOffset().upperBoundType()).isConnected(assemblyContigOffset));
 		}
 		if (supportingCategories != null) {
 			stream = stream.filter(s -> supportingCategories.contains(s.getCategory()));
