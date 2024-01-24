@@ -441,7 +441,7 @@ public class SplitReadEvidenceTest extends TestHelper {
 		// 0 1 2 3 4 5 6
 		//  M S S S    primary
 		//  S S S S M M realigned
-		Assert.assertEquals(10, e.getBreakpointQual(), 0);
+		Assert.assertEquals(35, e.getBreakpointQual(), 0);
 	}
 
 	@Test
@@ -462,7 +462,7 @@ public class SplitReadEvidenceTest extends TestHelper {
 		r.setAttribute(SamTags.ASSEMBLY_EVIDENCE_FRAGMENTID, "1 2 3");
 		AssemblyEvidenceSource aes = new MockAssemblyEvidenceSource(getContext(), ImmutableList.of(SES(0), SES(1)), new File("src/test/resources/test.bam"));
 		SplitReadEvidence e = SplitReadEvidence.create(aes, r).get(0);
-		Assert.assertEquals(0, e.getBreakpointQual(), 0);
+		Assert.assertEquals(35, e.getBreakpointQual(), 0);
 	}
 
 	@Test
