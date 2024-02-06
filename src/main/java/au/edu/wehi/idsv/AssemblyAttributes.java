@@ -223,9 +223,15 @@ public class AssemblyAttributes {
 	private Stream<AssemblyEvidenceSupport> filterSupport(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
 		Stream<AssemblyEvidenceSupport> stream = getSupport(aes).stream();
 		if (assemblyContigOffset != null) {
-			stream = stream.filter(s -> Range.range(Math.min(s.getAssemblyContigOffset().lowerEndpoint()+5,s.getAssemblyContigOffset().upperEndpoint()-5),
+			int requiredReadAssemblyOverlap;
+			if (aes != null) {
+				requiredReadAssemblyOverlap = aes.getContext().getConfig().requiredReadAssemblyOverlap;
+			} else {
+				requiredReadAssemblyOverlap = 0;
+            }
+            stream = stream.filter(s -> Range.range(Math.min(s.getAssemblyContigOffset().lowerEndpoint()+requiredReadAssemblyOverlap,s.getAssemblyContigOffset().upperEndpoint()-requiredReadAssemblyOverlap),
 					s.getAssemblyContigOffset().lowerBoundType(),
-					Math.max(s.getAssemblyContigOffset().upperEndpoint()-5,s.getAssemblyContigOffset().lowerEndpoint()+5),
+					Math.max(s.getAssemblyContigOffset().upperEndpoint()-requiredReadAssemblyOverlap,s.getAssemblyContigOffset().lowerEndpoint()+requiredReadAssemblyOverlap),
 					s.getAssemblyContigOffset().upperBoundType()).isConnected(assemblyContigOffset));
 		}
 		if (supportingCategories != null) {
