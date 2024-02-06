@@ -35,6 +35,7 @@ public class VariantCallingConfiguration {
 		requireReadPair = config.getBoolean("requireReadPair");
 		requireSplitRead = config.getBoolean("requireSplitRead");
 		includeSingleAssemblyFilter = config.getBoolean("includeSingleAssemblyFilter");
+		requiredReadAssemblyOverlap = config.getInt("requiredReadAssemblyOverlap");
 	}
 	/**
 	 * Ignore missing assembly file
@@ -116,6 +117,10 @@ public class VariantCallingConfiguration {
 	 * Include single_assembly filtering in output vcf
 	 */
 	public boolean includeSingleAssemblyFilter;
+	/**
+	 * Minimum number of bases that consider overlap between read and assembly to be considered for assembly support
+	 */
+	public int requiredReadAssemblyOverlap;
 	public BreakendSummary withMargin(BreakendSummary bp) {
 		if (bp == null) return null;
 		return bp.expandBounds(marginFor(bp));

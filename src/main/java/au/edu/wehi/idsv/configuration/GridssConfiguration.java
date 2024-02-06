@@ -77,10 +77,6 @@ public class GridssConfiguration {
 	 * Use a hashed evidenceID to save space and prevent read names exceeding the 254 character limit imposed by BAM 
 	 */
 	public boolean hashEvidenceID;
-	/**
-	 * Minimal number of bases that consider overlap between read and assembly to be considered for assembly support
-	 */
-	public int requiredReadAssemblyOverlap;
 
 	public AssemblyConfiguration getAssembly() {
 		return assembly;
@@ -130,7 +126,6 @@ public class GridssConfiguration {
 		useReadGroupSampleNameCategoryLabel = config.getBoolean("useReadGroupSampleNameCategoryLabel");
 		hashEvidenceID = config.getBoolean("hashEvidenceID");
 		sourceConfigurationFile = null;
-		requiredReadAssemblyOverlap = config.getInt("requiredReadAssemblyOverlap");
 	}
 	public static Configuration LoadConfiguration(File configuration) throws ConfigurationException {
 		CompositeConfiguration config = new CompositeConfiguration();

@@ -225,7 +225,7 @@ public class AssemblyAttributes {
 		if (assemblyContigOffset != null) {
 			int requiredReadAssemblyOverlap;
 			if (aes != null) {
-				requiredReadAssemblyOverlap = aes.getContext().getConfig().requiredReadAssemblyOverlap;
+				requiredReadAssemblyOverlap = aes.getContext().getConfig().getVariantCalling().requiredReadAssemblyOverlap;
 			} else {
 				requiredReadAssemblyOverlap = 0;
             }
