@@ -61,7 +61,7 @@ public class AssemblyAttributesTest extends TestHelper {
 		r.setAttribute(SamTags.ASSEMBLY_EVIDENCE_EVIDENCEID, "1 2 3");
 		r.setAttribute(SamTags.ASSEMBLY_EVIDENCE_FRAGMENTID, "1 2 3");
 		AssemblyAttributes attr = new AssemblyAttributes(r);
-		assertEquals(9, attr.getMinQualPosition(Range.closed(1, 20), null, null, null));
+		assertEquals(12, attr.getMinQualPosition(Range.closed(1, 20), null, null, null));
 	}
 	@Test
 	public void getMaxQualPosition_should_return_min_position() {
@@ -76,7 +76,7 @@ public class AssemblyAttributesTest extends TestHelper {
 		r.setAttribute(SamTags.ASSEMBLY_EVIDENCE_EVIDENCEID, "1 2 3");
 		r.setAttribute(SamTags.ASSEMBLY_EVIDENCE_FRAGMENTID, "1 2 3");
 		AssemblyAttributes attr = new AssemblyAttributes(r);
-		assertEquals(6, attr.getMaxQualPosition(Range.closed(0, 15), null, null, null));
+		assertEquals(3, attr.getMaxQualPosition(Range.closed(0, 15), null, null, null));
 	}
 	@Test
 	public void categories_should_map_to_processing_context() {

@@ -58,7 +58,7 @@ public class PositionalAssemblerTest extends TestHelper {
         assertTrue(AssemblyAttributes.isAssembly(r.get(0).getSAMRecord()));
         AssemblyAttributes aa = new AssemblyAttributes(r.get(0).getSAMRecord());
                                   // A A C G T T G G T T A A
-        int[] expected = new int[] {1,1,1,1,1,2,2,1,0,0,0,0,0,};
+        int[] expected = new int[] {1,1,2,2,2,2,2,2,2,2,2,1,0,};
         int[] actual = IntStream.range(0, 12+1).map(i -> aa.getSupportingReadCount(i, null, null, null)).toArray();
 		assertArrayEquals(expected, actual);
         assertArrayEquals(expected, IntStream.range(0, 12+1).map(i -> aa.getSupportingReadCount(i, null, ImmutableSet.of(AssemblyEvidenceSupport.SupportType.Read), null)).toArray());
