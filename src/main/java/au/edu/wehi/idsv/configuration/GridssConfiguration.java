@@ -78,7 +78,7 @@ public class GridssConfiguration {
 	 */
 	public boolean hashEvidenceID;
 	/**
-	 * Number of minimal number of bases that need to overlap between read and assembly to be considered for assembly support
+	 * Minimal number of bases that consider overlap between read and assembly to be considered for assembly support
 	 */
 	public int requiredReadAssemblyOverlap;
 
