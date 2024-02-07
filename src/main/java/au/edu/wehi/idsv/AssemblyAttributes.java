@@ -220,18 +220,19 @@ public class AssemblyAttributes {
 		}
 		return isUnique;
 	}
+
 	private Stream<AssemblyEvidenceSupport> filterSupport(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
 		Stream<AssemblyEvidenceSupport> stream = getSupport(aes).stream();
 		if (assemblyContigOffset != null) {
-			int requiredReadAssemblyOverlap;
+			int requiredReadAndAssemblyBreakpointOverlap;
 			if (aes != null) {
-				requiredReadAssemblyOverlap = aes.getContext().getConfig().getVariantCalling().requiredReadAssemblyOverlap;
+				requiredReadAndAssemblyBreakpointOverlap = aes.getContext().getConfig().getVariantCalling().requiredReadAndAssemblyBreakpointOverlap;
 			} else {
-				requiredReadAssemblyOverlap = 0;
-            }
-            stream = stream.filter(s -> Range.range(Math.min(s.getAssemblyContigOffset().lowerEndpoint()+requiredReadAssemblyOverlap,s.getAssemblyContigOffset().upperEndpoint()-requiredReadAssemblyOverlap),
+				requiredReadAndAssemblyBreakpointOverlap = 0;
+			}
+			stream = stream.filter(s -> Range.range(Math.min(s.getAssemblyContigOffset().lowerEndpoint() + requiredReadAndAssemblyBreakpointOverlap, s.getAssemblyContigOffset().upperEndpoint() - requiredReadAndAssemblyBreakpointOverlap),
 					s.getAssemblyContigOffset().lowerBoundType(),
-					Math.max(s.getAssemblyContigOffset().upperEndpoint()-requiredReadAssemblyOverlap,s.getAssemblyContigOffset().lowerEndpoint()+requiredReadAssemblyOverlap),
+					Math.max(s.getAssemblyContigOffset().upperEndpoint() - requiredReadAndAssemblyBreakpointOverlap, s.getAssemblyContigOffset().lowerEndpoint() + requiredReadAndAssemblyBreakpointOverlap),
 					s.getAssemblyContigOffset().upperBoundType()).isConnected(assemblyContigOffset));
 		}
 		if (supportingCategories != null) {
