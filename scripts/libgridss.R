@@ -160,8 +160,8 @@ gridss_breakpoint_filter = function(gr, vcf, bsgenome, min_support_filters=TRUE,
 	  if (!is.null(bsgenome)) {
 	    filtered = .addFilter(filtered, "small.replacement.fp", is_indel_artefact(gr, bsgenome))
 	  }
-	  filtered = .addFilter(filtered, "cohortMinSize", is_too_small_event(gr))
 	}
+	filtered = .addFilter(filtered, "cohortMinSize", is_too_small_event(gr))
 	if (somatic_filters) {
 		#normalaf <- gridss_af(gr, vcf, normalOrdinal)
 	  filtered = .addFilter(filtered, "normalSupport", .genosum(g$VF,normalOrdinal) > gridss.allowable_normal_contamination * .genosum(g$VF,tumourOrdinal))
