@@ -193,6 +193,7 @@ gridss_breakend_filter = function(gr, vcf, min_support_filters=TRUE, somatic_fil
     # noise from microsatellite sequences
     filtered = .addFilter(filtered, "NoAssembledRP", i$BASRP == 0)
     filtered = .addFilter(filtered, "LongPolyC", str_detect(gr$insSeq, "CCCCCCCCCCCCCCCC") | str_detect(gr$insSeq, "GGGGGGGGGGGGGGGG"))
+    filtered = .addFilter(filtered, "cohortMinSize", is_too_small_event(gr))
   }
   if (somatic_filters) {
     filtered = .addFilter(filtered, "normalSupport", .genosum(g$BVF,normalOrdinal) > gridss.allowable_normal_contamination * .genosum(g$BVF,tumourOrdinal))
@@ -294,6 +295,9 @@ is_too_small_event = function(gr, minSize=gridss.min_event_size) {
     bpgr = gr[isbp]
     svlen = abs(start(bpgr) - start(partner(bpgr))) + str_length(bpgr$insSeq) + ifelse(simpleEventType(bpgr) %in% c("DEL", "INS"), -1, 1)
     result[isbp] = simpleEventType(bpgr) %in% c("DEL", "DUP", "INS") & svlen < minSize
+  } else {
+    svlen = str_length(gr$insSeq)
+    result = simpleEventType(gr) %in% c("BE") & svlen < minSize
   }
   return(result)
 }
