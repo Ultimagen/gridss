@@ -487,7 +487,7 @@ public class SAMEvidenceSource extends EvidenceSource {
 				if(sce.getEvidenceSource().getFile().getPath().toLowerCase().endsWith(".cram")){
 					// in CRAM files, the MD and NM tags are not always present
 					htsjdk.samtools.util.SequenceUtil.calculateMdAndNmTags(sce.getSAMRecord(),
-							getContext().getReference().getSequence(sce.getSAMRecord().getContig()).getBases(), true, true);
+							getContext().getReferenceSequence(sce.getSAMRecord().getContig()).getBases(), true, true);
 				}
 				if (SAMRecordUtil.getAlignedIdentity(sce.getSAMRecord()) < scc.minAnchorIdentity) return true;
 				if (SAMRecordUtil.alignedEntropy(sce.getSAMRecord()) < config.minAnchorShannonEntropy) return true;
