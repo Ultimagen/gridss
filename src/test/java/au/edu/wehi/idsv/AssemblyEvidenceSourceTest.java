@@ -39,7 +39,7 @@ public class AssemblyEvidenceSourceTest extends IntermediateFilesTest {
 	public void should_write_breakend_bam() throws IOException {
 		createInput(RP(0, 1, 2, 1));
 		SAMEvidenceSource ses = new SAMEvidenceSource(getCommandlineContext(), input, null, 0);
-		FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
+		//FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
 		AssemblyEvidenceSource aes = new AssemblyEvidenceSource(getCommandlineContext(), ImmutableList.of(ses), assemblyFile);
 		aes.assembleBreakends(null);
 		assertTrue(assemblyFile.exists());
@@ -48,7 +48,7 @@ public class AssemblyEvidenceSourceTest extends IntermediateFilesTest {
 	public void breakend_bam_should_be_coordinate_sorted() throws IOException {
 		createInput(RP(0, 1, 2, 1));
 		SAMEvidenceSource ses = new SAMEvidenceSource(getCommandlineContext(), input, null, 0);
-		FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
+		//FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
 		AssemblyEvidenceSource aes = new AssemblyEvidenceSource(getCommandlineContext(), ImmutableList.of(ses), assemblyFile);
 		aes.assembleBreakends(null);
 		try (SamReader r = SamReaderFactory.makeDefault().open(assemblyFile)) {
@@ -64,7 +64,7 @@ public class AssemblyEvidenceSourceTest extends IntermediateFilesTest {
 		ProcessingContext pc = getCommandlineContext();
 		pc.getConfig().getAssembly().minReads = 1;
 		SAMEvidenceSource ses = new SAMEvidenceSource(pc, input, null, 0);
-		FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
+		//FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
 		AssemblyEvidenceSource aes = new AssemblyEvidenceSource(pc, ImmutableList.of(ses), assemblyFile);
 		aes.assembleBreakends(null);
 		
@@ -87,7 +87,7 @@ public class AssemblyEvidenceSourceTest extends IntermediateFilesTest {
 		pc.getConfig().getAssembly().minReads = 1;
 		//pc.getRealignmentParameters().requireRealignment = false;
 		SAMEvidenceSource ses = new SAMEvidenceSource(pc, input, null, 0);
-		FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
+		//FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
 		AssemblyEvidenceSource aes = new AssemblyEvidenceSource(pc, ImmutableList.of(ses), assemblyFile);
 		aes.assembleBreakends(null);
 		List<DirectedEvidence> list = Lists.newArrayList(aes.iterator(SAMEvidenceSource.EvidenceSortOrder.EvidenceStartPosition));
@@ -104,7 +104,7 @@ public class AssemblyEvidenceSourceTest extends IntermediateFilesTest {
 		ProcessingContext pc = getCommandlineContext();
 		pc.getAssemblyParameters().writeFiltered = false;
 		SAMEvidenceSource ses = new SAMEvidenceSource(pc, input, null, 0);
-		FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
+		//FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
 		AssemblyEvidenceSource aes = new AssemblyEvidenceSource(pc, ImmutableList.of(ses), assemblyFile);
 		aes.assembleBreakends(null);
 		List<DirectedEvidence> contigs = Lists.newArrayList(aes.iterator(SAMEvidenceSource.EvidenceSortOrder.EvidenceStartPosition));
@@ -275,7 +275,7 @@ public class AssemblyEvidenceSourceTest extends IntermediateFilesTest {
 		pc.getConfig().getAssembly().minReads = 1;
 		pc.getConfig().chunkSize = 100;
 		SAMEvidenceSource ses = new SAMEvidenceSource(pc, input, null, 0);
-		FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
+		//FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
 		AssemblyEvidenceSource aes = new AssemblyEvidenceSource(pc, ImmutableList.of(ses), assemblyFile);
 		aes.assembleBreakends(null);
 		List<DirectedEvidence> list = Lists.newArrayList(aes.iterator(SAMEvidenceSource.EvidenceSortOrder.EvidenceStartPosition));
@@ -292,7 +292,7 @@ public class AssemblyEvidenceSourceTest extends IntermediateFilesTest {
 		pc.getConfig().getAssembly().minReads = 1;
 		pc.getConfig().chunkSize = 100;
 		SAMEvidenceSource ses = new SAMEvidenceSource(pc, input, null, 0);
-		FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
+		//FileHelper.copy(ses.getFile(), ses.getSVFile(), true);
 		AssemblyEvidenceSource aes = new AssemblyEvidenceSource(pc, ImmutableList.of(ses), assemblyFile);
 		ExecutorService threadpool = Executors.newFixedThreadPool(8);
 		aes.assembleBreakends(threadpool);

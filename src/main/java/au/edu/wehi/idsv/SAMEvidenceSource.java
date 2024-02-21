@@ -282,7 +282,7 @@ public class SAMEvidenceSource extends EvidenceSource {
 	}
 	public void assertPreprocessingComplete() {
 		File svFile = getSVFile();
-		assert (svFile != null && !svFile.exists());
+		assert (svFile != null && svFile.exists());
 	}
 	private Iterator<DirectedEvidence> asEvidence(Iterator<SAMRecord> it, EvidenceSortOrder eso) {
 		it = new BufferedIterator<>(it, 2); // TODO: remove when https://github.com/samtools/htsjdk/issues/760 is resolved
