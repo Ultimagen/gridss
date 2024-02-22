@@ -49,7 +49,7 @@ RUN mvn -Dmaven.artifact.threads=8 verify && rm -rf target
 # Build GRIDSS jar
 ARG GRIDSS_VERSION
 COPY src /opt/gridss/src
-RUN mvn -T 1C -Drevision=${GRIDSS_VERSION} package && \
+RUN mvn -DskipTests -T 1C -Drevision=${GRIDSS_VERSION} package && \
 	cp target/gridss-${GRIDSS_VERSION}-gridss-jar-with-dependencies.jar /opt/gridss/
 
 FROM gridss_c_build_environment AS gridss
