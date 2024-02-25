@@ -17,14 +17,28 @@ after = pysam.AlignmentFile(args.after, "rb")
 output = pysam.AlignmentFile(args.output, "wb", template=after)
 
 reads_to_remove = set()
-# each read in after that is supplementary and has low mapping quality or is decoy alignment will be reverted
-# added fetch to make sure we iterate over all reads - otherwise it does not iterate once more
-for after_read in after.fetch():
-    if (after_read.mapping_quality < args.min_mapping_quality and after_read.flag & 2048) or \
-        (after_read.has_tag('SA') and 'decoy' in after_read.get_tag('SA')): # decoy alignment
-        reads_to_remove.add(after_read.query_name)
+sup_reads = set()
 
-# add the reads without the one we decided to remove
+# added 'fetch' to make sure we iterate over all reads - otherwise it does not iterate once more
+
+# reads with supplementary alignment
+for after_read in after.fetch():
+    if after_read.flag & 2048:
+        sup_reads.add(after_read.query_name)
+
+# reads that should be reverted
+for after in after.fetch():
+            # reads with supplementary alignment and has low mapping quality
+        if (after_read.mapping_quality < args.min_mapping_quality and after_read.flag & 2048) or \
+            # reads with decoy alignment
+            (after_read.has_tag('SA') and 'decoy' in after_read.get_tag('SA') or \
+            # reads which their primary mapping quality is low and they have supplementary alignment read
+            (after_read.mapping_quality < args.min_mapping_quality and after_read.flag & 0 and after_read.query_name in sup_reads)): # decoy alignment
+                reads_to_remove.add(after_read.query_name)
+
+sup_reads = set()
+
+# add the reads without the ones we decided to remove
 for after_read in after.fetch():
     if after_read.query_name not in reads_to_remove:
         output.write(after_read)
