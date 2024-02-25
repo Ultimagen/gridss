@@ -37,7 +37,6 @@ public class AllocateEvidenceTest extends IntermediateFilesTest {
 		Set<String> remoteEvidenceId = breakpoints.stream().map(bp -> bp.getRemoteEvidenceID()).collect(Collectors.toSet());
 		assertEquals(evidenceId, remoteEvidenceId);
 	}
-	/*
 	@Test
 	public void should_annotate_reads() throws IOException {
 		final ProcessingContext pc = getCommandlineContext();
@@ -309,5 +308,4 @@ public class AllocateEvidenceTest extends IntermediateFilesTest {
 		}
 	}
 
-	 */
 }
