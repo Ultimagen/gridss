@@ -29,11 +29,11 @@ for after_read in after.fetch():
 # reads that should be reverted:
 # reads with supplementary alignment and has low mapping quality
 # reads with decoy alignment
-# reads which their primary mapping quality is low and they have supplementary alignment read
+# reads which their primary mapping quality is low, and they have supplementary alignment read
 for after_read in after.fetch():
         if (after_read.mapping_quality < args.min_mapping_quality and after_read.flag & 2048) or \
             (after_read.has_tag('SA') and 'decoy' in after_read.get_tag('SA') or \
-            (after_read.mapping_quality < args.min_mapping_quality and after_read.flag & 0 and after_read.query_name in sup_reads)):
+            (after_read.mapping_quality < args.min_mapping_quality and after_read.flag == 0 and after_read.query_name in sup_reads)):
                 reads_to_remove.add(after_read.query_name)
 
 
