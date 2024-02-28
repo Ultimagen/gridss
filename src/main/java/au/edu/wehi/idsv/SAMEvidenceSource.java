@@ -282,7 +282,9 @@ public class SAMEvidenceSource extends EvidenceSource {
 	}
 	public void assertPreprocessingComplete() {
 		File svFile = getSVFile();
-		assert (svFile != null && svFile.exists());
+		if (svFile != null && !svFile.exists()) {
+			throw new IllegalStateException(String.format("Missing required file %s. See GRIDSS pipeline examples and documentation.", svFile));
+		}
 	}
 	private Iterator<DirectedEvidence> asEvidence(Iterator<SAMRecord> it, EvidenceSortOrder eso) {
 		it = new BufferedIterator<>(it, 2); // TODO: remove when https://github.com/samtools/htsjdk/issues/760 is resolved
