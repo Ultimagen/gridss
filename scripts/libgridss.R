@@ -1097,10 +1097,13 @@ gridss_breakpoint_somatic_llr = function(vcf, normalOrdinal, tumourOrdinal, cont
   return (df$contamination_log_p - df$germline_het_log_p)
 }
 
-passes_final_filters = function(vcf, include.existing.filters=TRUE) {
+passes_final_filters = function(vcf, include.existing.filters=TRUE, has_pair = NULL) {
+  if (is.null(has_pair)) {
+    has_pair <- FALSE
+  }
   return(
     (!include.existing.filters | rowRanges(vcf)$FILTER %in% c(".", "PASS")) &
-    ifelse(is.na(info(vcf)$MATEID),
+    ifelse(is.na(info(vcf)$MATEID) & !has_pair,
          rowRanges(vcf)$QUAL >= gridss.min_qual * gridss.single_breakend_multiplier,
          rowRanges(vcf)$QUAL >= gridss.min_qual))
 }
