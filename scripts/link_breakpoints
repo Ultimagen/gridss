@@ -195,6 +195,7 @@ bebeins_link_df = linked_by_breakend_breakend_insertion_classification(begr) %>%
   group_by(linked_by) %>%
   mutate(has_pair = n() > 1) %>%
   ungroup() %>%
+  mutate(has_pair = ifelse(is.na(info(vcf[sourceId])$MATEID), has_pair, FALSE)) %>%
   # Your existing logic to add 'pass' column
   mutate(pass=passes_final_filters(vcf[sourceId], has_pair=has_pair)) %>%
   group_by(linked_by) %>%
