@@ -58,8 +58,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
     sw = swalign.LocalAlignment(scoring, gap_penalty=gap_penalty, gap_extension_penalty=gap_extension_penalty)
 
 
-    with pysam.AlignmentFile(cram_path, "rc", reference_filename=reference_path) as cram:
-        with pysam.AlignmentFile(output_path, "wc", template=cram) as output:
+    with pysam.AlignmentFile(cram_path) as cram:
+        with pysam.AlignmentFile(output_path, mode='w', header=cram.header) as output:
             # Iterate over the reads in the CRAM file
 
             for read in cram.fetch():
@@ -93,7 +93,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                         i+=1
 
                 if found: # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
-                    fa_seq = reference[read.reference_name][read.reference_start-1:read.reference_start-1+len(sequence)].seq.upper()
+                    fa_seq = reference[read.reference_name][read.reference_start:read.reference_start+len(sequence)].seq.upper()
                     edited_fa_seq = fa_seq[:start_del] + fa_seq[end_del:]
                     print(f"Original sequence:  {sequence}")
                     print(f"Edited sequence:    {edited_sequence}")
@@ -104,14 +104,14 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     print("Read cigar: ", read.cigarstring)
 
 
-
-                    score_orig, cigar_orig = run_alignment(edited_fa_seq, edited_sequence, sw)
+                    print("Running alignment on original sequence")
+                    score_orig, cigar_orig = run_alignment(fa_seq, edited_sequence, sw)
                     print(f"score of orig SW:   {score_orig}")
 
                     # run alignment on reverse complement
-                    rev_comp_edited_fa_seq = reverse_complement(edited_fa_seq)
+                    print("Running alignment on reverse complement sequence")
                     rev_comp_edited_sequence = reverse_complement(edited_sequence)
-                    score_rev, cigar_rev = run_alignment(rev_comp_edited_fa_seq, rev_comp_edited_sequence, sw)
+                    score_rev, cigar_rev = run_alignment(edited_fa_seq, rev_comp_edited_sequence, sw)
 
                     print(f"score of rev SW:    {score_rev}")
 
@@ -142,11 +142,12 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     print("Final cigar after change (length): ", calculate_sequence_length_by_cigar(updated_cigar))
                     print("cigartuples: ", cigar_string_to_cigartuples(updated_cigar))
 
-                    read.cigarstring = updated_cigar
-                    read.query_sequence = sequence
+                    read.cigar = cigar_string_to_cigartuples(updated_cigar)
+                    read.query_sequence = updated_seq
 
 
-                    output.write(read)
+                    if read.query_name =="HC_chr9:69449989_6":
+                        output.write(read)
 
                     print("#########")
                     print("\n")
@@ -157,6 +158,34 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     print("\n")
                     output.write(read)
 
+
+def pad_alignment_with_sc(cigar, q_pos, q_end, expected_length):
+    """Pad the CIGAR string with soft-clipping operations to match the expected length."""
+    # Regular expression to find numbers followed by CIGAR operation characters
+    pattern = re.compile(r'(\d+)([MIDNSHP=X])')
+
+    # Find all matches of the pattern in the CIGAR string
+    matches = pattern.findall(cigar)
+
+    # Sum up the lengths of operations that consume the query sequence
+    consumed_length = 0
+    for count, op in matches:
+        if op in "MIS=X":
+            consumed_length += int(count)
+
+    # Calculate the length of soft-clipping to add
+    sc_length = expected_length - consumed_length
+
+    padded_cigar = cigar
+    if q_pos > 0:
+        # Add the soft-clipping to the beginning of the CIGAR string
+        padded_cigar = f"{q_pos}S{padded_cigar}"
+
+    if q_end < expected_length:
+        # Add the soft-clipping to the end of the CIGAR string
+        padded_cigar = f"{padded_cigar}{sc_length-q_pos}S"
+
+    return padded_cigar
 
 
 def run_alignment(fa_seq, sequence, sw):
@@ -169,7 +198,8 @@ def run_alignment(fa_seq, sequence, sw):
                     match = re.search(r'Score: (\d+)', out)
                     score = int(match.group(1))
                     print(out)
-                    return score, cigar
+                    padded_cigar = pad_alignment_with_sc(cigar, alignment.q_pos, alignment.q_end, len(sequence))
+                    return score, padded_cigar
 def reverse_complement(seq):
     """Return the reverse complement of the given DNA sequence."""
     complement_dict = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'N': 'N'}
@@ -263,8 +293,21 @@ def insert_deletion_into_cigar(cigar, position, deletion_size):
 
     return updated_cigar
 
-# usage
+# # usage
 cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9_69449415_69450719.bam"
 output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9_69449415_69450719.bam"
 reference_path = "/data/Homo_sapiens_assembly38.fasta"
 find_homopolymers(cram_path, output_path, reference_path)
+
+
+
+
+# with pysam.AlignmentFile("/data/deepvariants/gridss/030945_merged_assembly_chr9_69449415_69450719.bam") as infile:
+#     with pysam.AlignmentFile('/data/deepvariants/gridss/test.bam', mode='w', header=infile.header) as outfile:
+#          for rec in infile:
+#             #rec.cigarstring= '115M1I1D'
+#             rec.query_sequence = 'AGAAAGACACTTCCCTGGGGACACCAACCCAGATGAGTTCCTGTCTTCTCAGCATTCCGCATATTTGGAGTTTTTAAGAAATGAATTCACACAGGTCTACACTCTTTTGTAATTCTCTCGTTTCACATAAGCAAACTTGCCTCAGCACACAACCATGAGGACCACCAGTTTTTTTTTTATTCATTTCGTCC'
+#             rec.cigar = [(0, 115), (1, 1), (2, 1), (0, 62), (2, 10), (1, 1), (0, 2), (1, 1),(2, 1),(1, 1),(0, 3),(4, 5)]
+#             #rec.cigar = [(0, 115), (1, 1), (2, 1), (0, 62), (2, 10), (1, 1), (0, 2), (1, 1), (2, 1), (1, 1),(0, 3),(0, 5)]
+#             #rec.query_sequence = 'A'*100
+#             outfile.write(rec)
