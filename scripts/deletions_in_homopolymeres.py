@@ -44,6 +44,30 @@ def cigar_string_to_cigartuples(cigar_string):
 
     return cigartuples
 
+def remove_long_homopolymers(sequence, homopolymer_length=10, read_name=""):
+    i = 0
+    edited_sequence = ""
+    start_end_del_tuples = []
+    while i < len(sequence):
+        count = 1
+        while i + count < len(sequence) and sequence[i] == sequence[i + count]:
+            count += 1
+
+        if count >= homopolymer_length:
+            print(
+                f"Read {read_name} contains a homopolymer: {sequence[i] * count} at position {i} of the length {count}")
+            edited_sequence += sequence[i] * homopolymer_length
+            i += count
+            start_end_del_tuples.append((i - (count - homopolymer_length) , i))
+        elif count > 1:
+            edited_sequence += sequence[i] * count
+            i += count
+        else:
+            edited_sequence += sequence[i]
+            i += 1
+    return edited_sequence, start_end_del_tuples
+
+
 def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10):
     # Open the CRAM file
     reference = pyfaidx.Fasta(reference_path)
@@ -59,7 +83,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
 
     with pysam.AlignmentFile(cram_path) as cram:
-        with pysam.AlignmentFile(output_path, mode='w', header=cram.header) as output:
+        with pysam.AlignmentFile(output_path, mode='wb', header=cram.header) as output:
             # Iterate over the reads in the CRAM file
 
             for read in cram.fetch():
@@ -68,33 +92,22 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     continue  # Skip reads without a query sequence
 
                 # Search for homopolymers in the sequence
-                i = 0
-                start_del=-1
-                end_del=-1
-                found = False
-                edited_sequence = ""
-                while i < len(sequence):
-                    count = 1
-                    while i + count < len(sequence) and sequence[i] == sequence[i + count] and found == False:
-                        count += 1
+                edited_sequence, start_end_del_tuples = remove_long_homopolymers(read.query_sequence, homopolymer_length, read.query_name)
 
-                    if count >= homopolymer_length:
-                        print(f"Read {read.query_name} contains a homopolymer: {sequence[i] * count} at position {i} of the length {count}")
-                        edited_sequence += sequence[i] * homopolymer_length
-                        i += count
-                        found = True
-                        start_del = i-count+homopolymer_length
-                        end_del = i
-                    elif count > 1:
-                        edited_sequence += sequence[i] * count
-                        i+=count
-                    else:
-                        edited_sequence += sequence[i]
-                        i+=1
+                #Search for homopolymer in the reference
+                #sc_length = 0
+                if read.cigartuples[0][0] == 4:
+                    # the read is soft clipped
+                    #sc_length = read.cigartuples[0][1]
+                #fa_seq = reference[read.reference_name][read.reference_start - sc_length:read.reference_start + len(sequence) - sc_length].seq.upper()
+                fa_seq = reference[read.reference_name][
+                         read.reference_start :read.reference_start + len(sequence)].seq.upper()
+                edited_fa_seq, ref_start_end_del_tuples = remove_long_homopolymers(fa_seq, homopolymer_length, "ref of" + read.query_name)
 
-                if found: # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
-                    fa_seq = reference[read.reference_name][read.reference_start:read.reference_start+len(sequence)].seq.upper()
-                    edited_fa_seq = fa_seq[:start_del] + fa_seq[end_del:]
+
+                if len(start_end_del_tuples)>0 or len(ref_start_end_del_tuples)>0:
+                    # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
+
                     print(f"Original sequence:  {sequence}")
                     print(f"Edited sequence:    {edited_sequence}")
 
@@ -105,7 +118,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
 
                     print("Running alignment on original sequence")
-                    score_orig, cigar_orig = run_alignment(fa_seq, edited_sequence, sw)
+                    score_orig, cigar_orig = run_alignment(edited_fa_seq, edited_sequence, read.reference_start, sc_length, sw)
                     print(f"score of orig SW:   {score_orig}")
 
                     # run alignment on reverse complement
@@ -125,29 +138,44 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                         score = score_rev
                         cigar = cigar_rev
                         updated_seq = rev_comp_edited_sequence
-                        start_del = len(sequence) - end_del
-                        end_del = len(sequence) - start_del
+                        start_end_del_tuples = [(len(sequence) - end, len(sequence) - start) for start, end in start_end_del_tuples]
+                        ref_start_end_del_tuples = [(len(fa_seq) - end, len(fa_seq) - start) for start, end in ref_start_end_del_tuples]
 
                     print(f"Final score:                      {score}")
 
+                    # Insert deletions into the CIGAR string
+                    updated_cigar = cigar
+                    print(f"start_end_del_tuples: {start_end_del_tuples}")
+                    print(f"                             {updated_cigar}")
+                    for start_del, end_del in start_end_del_tuples:
+                        updated_cigar = insert_operation_into_cigar(updated_cigar, start_del, end_del - start_del, 'I')
+                        print(f"start_del: {start_del}, end_del: {end_del}", updated_cigar)
 
-                    updated_cigar = insert_deletion_into_cigar(cigar, start_del, end_del - start_del)
+                    updated_cigar_D = updated_cigar
+
+                    print(f"start_end_del_tuples: {ref_start_end_del_tuples}")
+                    print(f"                             {updated_cigar}")
+                    for start_del, end_del in ref_start_end_del_tuples:
+                        updated_cigar = insert_operation_into_cigar(updated_cigar, start_del, end_del - start_del, 'D')
+                        print(f"start_del: {start_del}, end_del: {end_del}", updated_cigar)
+
+
 
                     print("original seq length: ", len(sequence))
                     print("Read cigar (length): ", calculate_sequence_length_by_cigar(read.cigarstring))
                     print("updated seq length: ", len(updated_seq))
                     print(f"Final cigar before change:        {cigar}")
                     print("Final cigar before change (length): ", calculate_sequence_length_by_cigar(cigar))
+                    print(f"updated_cigar_D                   {updated_cigar_D}")
+                    print("Final cigar before change_D (length): ", calculate_sequence_length_by_cigar(updated_cigar_D))
                     print(f"Final cigar after change:         {updated_cigar}")
                     print("Final cigar after change (length): ", calculate_sequence_length_by_cigar(updated_cigar))
                     print("cigartuples: ", cigar_string_to_cigartuples(updated_cigar))
 
                     read.cigar = cigar_string_to_cigartuples(updated_cigar)
-                    read.query_sequence = updated_seq
 
 
-                    if read.query_name =="HC_chr9:69449989_6":
-                        output.write(read)
+                    output.write(read)
 
                     print("#########")
                     print("\n")
@@ -159,7 +187,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     output.write(read)
 
 
-def pad_alignment_with_sc(cigar, q_pos, q_end, expected_length):
+def pad_alignment_with_sc(cigar, q_pos, q_end, expected_length, start_pos, sc_length):
     """Pad the CIGAR string with soft-clipping operations to match the expected length."""
     # Regular expression to find numbers followed by CIGAR operation characters
     pattern = re.compile(r'(\d+)([MIDNSHP=X])')
@@ -188,7 +216,7 @@ def pad_alignment_with_sc(cigar, q_pos, q_end, expected_length):
     return padded_cigar
 
 
-def run_alignment(fa_seq, sequence, sw):
+def run_alignment(fa_seq, sequence, sw, start_pos, sc_length):
                 alignment = sw.align(fa_seq, sequence)
                 with io.StringIO() as file:
                     alignment.dump(out=file)
@@ -198,7 +226,8 @@ def run_alignment(fa_seq, sequence, sw):
                     match = re.search(r'Score: (\d+)', out)
                     score = int(match.group(1))
                     print(out)
-                    padded_cigar = pad_alignment_with_sc(cigar, alignment.q_pos, alignment.q_end, len(sequence))
+                    print(f"alignment.q_pos: {alignment.q_pos} alignment.q_end: {alignment.q_end}")
+                    padded_cigar, start_pos = pad_alignment_with_sc(cigar, alignment.q_pos, alignment.q_end, alignment.r_pos, len(sequence), start_pos, sc_length)
                     return score, padded_cigar
 def reverse_complement(seq):
     """Return the reverse complement of the given DNA sequence."""
@@ -210,42 +239,9 @@ def reverse_complement(seq):
     return reverse_comp_seq
 
 
-def merge_operations(ops):
-    """Merge consecutive deletions and adjust for insertion followed by deletion."""
-    merged_ops = []
-    skip_next = False
 
-    for i, (count, op) in enumerate(ops[:-1]):
-        if skip_next:
-            skip_next = False
-            continue
-
-        # Look ahead to next operation
-        next_count, next_op = ops[i + 1]
-
-        # Merge consecutive deletions
-        if op == 'D' and next_op == 'D':
-            merged_ops.append((count + next_count, 'D'))
-            skip_next = True
-        # Adjust for insertion followed by deletion
-        elif op == 'I' and next_op == 'D':
-            if count > next_count:
-                merged_ops.append((count - next_count, 'I'))
-            elif count < next_count:
-                merged_ops.append((next_count - count, 'D'))
-            # If equal, they cancel each other, no operation is appended
-            skip_next = True
-        else:
-            merged_ops.append((count, op))
-
-    if not skip_next:  # Ensure the last operation is added if not already handled
-        merged_ops.append(ops[-1])
-
-    return merged_ops
-
-
-def insert_deletion_into_cigar(cigar, position, deletion_size):
-    import re
+def insert_operation_into_cigar(cigar, position, op_size, op_type):
+    assert op_type in ['D', 'I'], "op_type must be 'D' for deletion or 'I' for insertion"
 
     # Split the CIGAR string into its components
     cigar_components = re.findall(r'\d+[MIDNSHP=X]', cigar)
@@ -255,38 +251,64 @@ def insert_deletion_into_cigar(cigar, position, deletion_size):
 
     new_cigar_ops = []
     accumulated_length = 0
-    deletion_inserted = False
-
-    for count, op in parsed_cigar:
-        # Only proceed if we haven't inserted the deletion yet
-        if not deletion_inserted:
-            # Operations that consume the reference (for position tracking)
-            if op in 'MDN=X':
-                # If the position falls within this operation's span
-                if accumulated_length < position <= accumulated_length + count:
-                    # Calculate the split before and after the deletion
-                    before_length = position - accumulated_length
-                    after_length = count - before_length
-
-                    # Add the operation before the deletion, if any
-                    if before_length > 0:
-                        new_cigar_ops.append((before_length, op))
-
-                    # Insert the deletion
-                    new_cigar_ops.append((deletion_size, 'D'))
-                    deletion_inserted = True
-
-                    # Add what's left of the operation after the deletion, if any
-                    if after_length > 0:
-                        new_cigar_ops.append((after_length, op))
+    operation_inserted = False
+    i=0
+    while i<len(parsed_cigar):
+        count, op = parsed_cigar[i]
+        if op in 'MIDS' and not operation_inserted:
+            if accumulated_length < position <= accumulated_length + count:
+                operation_inserted = True
+                # Split the operation at the insertion/deletion position
+                if op == op_type:
+                    # merge the operations
+                    new_cigar_ops.append((op_size+count, op_type))
+                if op == 'S':
+                    # merge the operations
+                    new_cigar_ops.append((op_size+count, 'S'))
+                # elif op in ['D','I'] and op_type in ['D','I']:
+                #     # subtract the size of the operations
+                #     if count > op_size:
+                #         new_cigar_ops.append((count-op_size, op))
+                #     else:
+                #         new_cigar_ops.append((op_size-count, op_type))
                 else:
-                    new_cigar_ops.append((count, op))
-                accumulated_length += count
-            else:  # For operations that do not consume the reference
+                    # Insert the operation
+                    before_pos = position - accumulated_length
+                    if before_pos > 0:
+                        new_cigar_ops.append((before_pos, op))
+
+                    after_pos = count - before_pos
+                    if after_pos == 0:
+                        # check if we can merge with the next operation
+                        if i+1 < len(parsed_cigar) and parsed_cigar[i+1][1] == op_type:
+                            # merge the operations
+                            new_cigar_ops.append((op_size+parsed_cigar[i+1][0], op_type))
+                            i = i + 1
+                        # elif i+1 < len(parsed_cigar) and parsed_cigar[i+1][1] in ['D','I']:
+                        #     if op_type in ['D','I']:
+                        #         # subtract the size of the operations
+                        #         if parsed_cigar[i+1][0] > op_size:
+                        #             new_cigar_ops.append((parsed_cigar[i+1][0]-op_size, parsed_cigar[i+1][1]))
+                        #             i = i + 1
+                        #         else:
+                        #             new_cigar_ops.append((op_size-parsed_cigar[i+1][0], op_type))
+                        #             i = i + 1
+                        else:
+                            new_cigar_ops.append((op_size, op_type))
+                    elif after_pos > 0:
+                        new_cigar_ops.append((op_size, op_type))
+                        new_cigar_ops.append((after_pos, op))
+            else:
                 new_cigar_ops.append((count, op))
+
+            if op != 'I':  # Increment accumulated_length except for 'I' operation
+                accumulated_length += count
         else:
-            # Add all remaining operations after the deletion has been inserted
             new_cigar_ops.append((count, op))
+        i=i+1
+
+    # Merge operations if needed
+    # merged_ops = merge_operations(new_cigar_ops)
 
     # Convert back to CIGAR string format
     updated_cigar = ''.join(f"{count}{op}" for count, op in new_cigar_ops)
