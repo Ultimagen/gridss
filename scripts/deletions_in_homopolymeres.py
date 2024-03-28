@@ -76,6 +76,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
     mismatch = -4
     gap_penalty = -1
     gap_extension_penalty = -6
+    sc_penalty = -5
 
 
     scoring = swalign.NucleotideScoringMatrix(match, mismatch)
@@ -95,13 +96,11 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                 edited_sequence, start_end_del_tuples = remove_long_homopolymers(read.query_sequence, homopolymer_length, read.query_name)
 
                 #Search for homopolymer in the reference
-                #sc_length = 0
+                sc_length = 0
                 if read.cigartuples[0][0] == 4:
                     # the read is soft clipped
-                    #sc_length = read.cigartuples[0][1]
-                #fa_seq = reference[read.reference_name][read.reference_start - sc_length:read.reference_start + len(sequence) - sc_length].seq.upper()
-                fa_seq = reference[read.reference_name][
-                         read.reference_start :read.reference_start + len(sequence)].seq.upper()
+                    sc_length = read.cigartuples[0][1]
+                fa_seq = reference[read.reference_name][read.reference_start - sc_length:read.reference_start + len(sequence) - sc_length].seq.upper()
                 edited_fa_seq, ref_start_end_del_tuples = remove_long_homopolymers(fa_seq, homopolymer_length, "ref of" + read.query_name)
 
 
@@ -118,13 +117,13 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
 
                     print("Running alignment on original sequence")
-                    score_orig, cigar_orig = run_alignment(edited_fa_seq, edited_sequence, read.reference_start, sc_length, sw)
+                    score_orig, cigar_orig, start_pos = run_alignment(edited_fa_seq, edited_sequence, read.reference_start, sc_length, sw)
                     print(f"score of orig SW:   {score_orig}")
 
                     # run alignment on reverse complement
                     print("Running alignment on reverse complement sequence")
                     rev_comp_edited_sequence = reverse_complement(edited_sequence)
-                    score_rev, cigar_rev = run_alignment(edited_fa_seq, rev_comp_edited_sequence, sw)
+                    score_rev, cigar_rev, start_pos_rev = run_alignment(edited_fa_seq, rev_comp_edited_sequence,read.reference_start, 0, sw)#TODO
 
                     print(f"score of rev SW:    {score_rev}")
 
@@ -160,7 +159,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                         print(f"start_del: {start_del}, end_del: {end_del}", updated_cigar)
 
 
-
+                    print("original start pos: ", read.reference_start)
+                    print("updated start pos: ", start_pos)
                     print("original seq length: ", len(sequence))
                     print("Read cigar (length): ", calculate_sequence_length_by_cigar(read.cigarstring))
                     print("updated seq length: ", len(updated_seq))
@@ -173,6 +173,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     print("cigartuples: ", cigar_string_to_cigartuples(updated_cigar))
 
                     read.cigar = cigar_string_to_cigartuples(updated_cigar)
+                    read.reference_start = start_pos
 
 
                     output.write(read)
@@ -187,7 +188,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     output.write(read)
 
 
-def pad_alignment_with_sc(cigar, q_pos, q_end, expected_length, start_pos, sc_length):
+def pad_alignment_with_sc(cigar, q_pos, q_end, r_pos, r_end, expected_length, start_pos, sc_length):
     """Pad the CIGAR string with soft-clipping operations to match the expected length."""
     # Regular expression to find numbers followed by CIGAR operation characters
     pattern = re.compile(r'(\d+)([MIDNSHP=X])')
@@ -202,21 +203,27 @@ def pad_alignment_with_sc(cigar, q_pos, q_end, expected_length, start_pos, sc_le
             consumed_length += int(count)
 
     # Calculate the length of soft-clipping to add
-    sc_length = expected_length - consumed_length
+    if q_pos < sc_length:
+        # Means we should start ref a bit earlier
+        start_pos = start_pos - sc_length + r_pos
+        #start_pos = start_pos - (sc_length + (0 if r_pos == 0 else (r_pos -1)))
+        #start_pos = start_pos - (sc_length + (0 if r_pos == 0 else (r_pos - 1)))
+
+
 
     padded_cigar = cigar
     if q_pos > 0:
         # Add the soft-clipping to the beginning of the CIGAR string
         padded_cigar = f"{q_pos}S{padded_cigar}"
 
-    if q_end < expected_length:
+    if q_end < expected_length: # TODO
         # Add the soft-clipping to the end of the CIGAR string
-        padded_cigar = f"{padded_cigar}{sc_length-q_pos}S"
+        padded_cigar = f"{padded_cigar}{expected_length-q_end}S"
 
-    return padded_cigar
+    return padded_cigar, start_pos
 
 
-def run_alignment(fa_seq, sequence, sw, start_pos, sc_length):
+def run_alignment(fa_seq, sequence, start_pos, sc_length, sw):
                 alignment = sw.align(fa_seq, sequence)
                 with io.StringIO() as file:
                     alignment.dump(out=file)
@@ -227,8 +234,9 @@ def run_alignment(fa_seq, sequence, sw, start_pos, sc_length):
                     score = int(match.group(1))
                     print(out)
                     print(f"alignment.q_pos: {alignment.q_pos} alignment.q_end: {alignment.q_end}")
-                    padded_cigar, start_pos = pad_alignment_with_sc(cigar, alignment.q_pos, alignment.q_end, alignment.r_pos, len(sequence), start_pos, sc_length)
-                    return score, padded_cigar
+                    print(f"alignment.r_pos: {alignment.r_pos} alignment.r_end: {alignment.r_end}")
+                    padded_cigar, start_pos = pad_alignment_with_sc(cigar, alignment.q_pos, alignment.q_end, alignment.r_pos, alignment.r_end, len(sequence), start_pos, sc_length)
+                    return score, padded_cigar, start_pos
 def reverse_complement(seq):
     """Return the reverse complement of the given DNA sequence."""
     complement_dict = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C', 'N': 'N'}
