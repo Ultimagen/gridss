@@ -3,6 +3,7 @@ import pyfaidx
 import swalign
 import io
 import re
+from Bio import Align
 
 ## ONLY FOR DEBUGGING
 def calculate_sequence_length_by_cigar(cigar_string):
@@ -53,7 +54,7 @@ def remove_long_homopolymers(sequence, homopolymer_length=10, read_name=""):
         while i + count < len(sequence) and sequence[i] == sequence[i + count]:
             count += 1
 
-        if count >= homopolymer_length:
+        if count > homopolymer_length:
             print(
                 f"Read {read_name} contains a homopolymer: {sequence[i] * count} at position {i} of the length {count}")
             edited_sequence += sequence[i] * homopolymer_length
@@ -72,15 +73,30 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
     # Open the CRAM file
     reference = pyfaidx.Fasta(reference_path)
 
-    match = 1
-    mismatch = -4
-    gap_penalty = -1
-    gap_extension_penalty = -6
-    sc_penalty = -5
+    # match = 1
+    # mismatch = -4
+    # gap_penalty = -6
+    # gap_extension_penalty = -1
+    # sc_penalty = -5
+
+    #scoring = swalign.NucleotideScoringMatrix(match, mismatch)
+    #sw = swalign.LocalAlignment(scoring, gap_penalty=gap_penalty, gap_extension_penalty=gap_extension_penalty)
 
 
-    scoring = swalign.NucleotideScoringMatrix(match, mismatch)
-    sw = swalign.LocalAlignment(scoring, gap_penalty=gap_penalty, gap_extension_penalty=gap_extension_penalty)
+    # Create a new PairwiseAligner object
+    aligner = Align.PairwiseAligner()
+
+    aligner.match_score = 1
+    aligner.mismatch_score = -4
+    # Set gap scoring
+    aligner.open_gap_score = -6
+    aligner.extend_gap_score = -1
+
+    # Set end gap scores to 0.0 to not penalize them
+    aligner.target_end_gap_score = 0
+    aligner.query_end_gap_score = -5
+
+
 
 
     with pysam.AlignmentFile(cram_path) as cram:
@@ -97,10 +113,12 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
                 #Search for homopolymer in the reference
                 sc_length = 0
+                del_length = 0
                 if read.cigartuples[0][0] == 4:
                     # the read is soft clipped
                     sc_length = read.cigartuples[0][1]
-                fa_seq = reference[read.reference_name][read.reference_start - sc_length:read.reference_start + len(sequence) - sc_length].seq.upper()
+                    del_length = start_end_del_tuples[0][1] - start_end_del_tuples[0][0] if len(start_end_del_tuples)>0 else 0
+                fa_seq = reference[read.reference_name][read.reference_start - sc_length - del_length:read.reference_start + len(sequence) - sc_length].seq.upper()
                 edited_fa_seq, ref_start_end_del_tuples = remove_long_homopolymers(fa_seq, homopolymer_length, "ref of" + read.query_name)
 
 
@@ -117,13 +135,15 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
 
                     print("Running alignment on original sequence")
-                    score_orig, cigar_orig, start_pos = run_alignment(edited_fa_seq, edited_sequence, read.reference_start, sc_length, sw)
+                    score_orig, cigar_orig, start_pos, q_start, r_start = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, del_length, aligner)
+                    #score_orig, cigar_orig, start_pos = run_alignment(edited_fa_seq, edited_sequence, read.reference_start, sc_length, sw)
                     print(f"score of orig SW:   {score_orig}")
 
                     # run alignment on reverse complement
                     print("Running alignment on reverse complement sequence")
                     rev_comp_edited_sequence = reverse_complement(edited_sequence)
-                    score_rev, cigar_rev, start_pos_rev = run_alignment(edited_fa_seq, rev_comp_edited_sequence,read.reference_start, 0, sw)#TODO
+                    score_rev, cigar_rev, start_pos_rev, q_start_rev, r_start_rev = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, del_length, aligner)
+                    #score_rev, cigar_rev, start_pos_rev = run_alignment(edited_fa_seq, rev_comp_edited_sequence,read.reference_start, 0, sw)#TODO
 
                     print(f"score of rev SW:    {score_rev}")
 
@@ -142,30 +162,34 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
                     print(f"Final score:                      {score}")
 
-                    # Insert deletions into the CIGAR string
-                    updated_cigar = cigar
-                    print(f"start_end_del_tuples: {start_end_del_tuples}")
-                    print(f"                             {updated_cigar}")
-                    for start_del, end_del in start_end_del_tuples:
-                        updated_cigar = insert_operation_into_cigar(updated_cigar, start_del, end_del - start_del, 'I')
-                        print(f"start_del: {start_del}, end_del: {end_del}", updated_cigar)
-
-                    updated_cigar_D = updated_cigar
-
-                    print(f"start_end_del_tuples: {ref_start_end_del_tuples}")
-                    print(f"                             {updated_cigar}")
-                    for start_del, end_del in ref_start_end_del_tuples:
-                        updated_cigar = insert_operation_into_cigar(updated_cigar, start_del, end_del - start_del, 'D')
-                        print(f"start_del: {start_del}, end_del: {end_del}", updated_cigar)
-
-
                     print("original start pos: ", read.reference_start)
                     print("updated start pos: ", start_pos)
                     print("original seq length: ", len(sequence))
                     print("Read cigar (length): ", calculate_sequence_length_by_cigar(read.cigarstring))
                     print("updated seq length: ", len(updated_seq))
+
+                    # Insert deletions into the CIGAR string
+                    updated_cigar = cigar
                     print(f"Final cigar before change:        {cigar}")
                     print("Final cigar before change (length): ", calculate_sequence_length_by_cigar(cigar))
+                    print(f"seq start_end_del_tuples: {start_end_del_tuples}")
+                    print(f"                             {updated_cigar}")
+                    for start_del, end_del in start_end_del_tuples:
+                        updated_cigar = insert_operation_into_cigar(updated_cigar, start_del, end_del - start_del, 'I')
+                        print(f"start_del: {start_del}, end_del: {end_del}, cigar_length: {calculate_sequence_length_by_cigar(updated_cigar)} ", updated_cigar)
+
+                    updated_cigar_D = updated_cigar
+
+                    print(f"ref start_end_del_tuples: {ref_start_end_del_tuples}")
+                    print(f"                             {updated_cigar}")
+                    for start_del, end_del in ref_start_end_del_tuples:
+                        updated_cigar = insert_operation_into_cigar(updated_cigar, start_del - r_start + q_start, end_del - start_del, 'D')
+                        print(f"start_del: {start_del}, end_del: {end_del}, cigar_length: {calculate_sequence_length_by_cigar(updated_cigar)} ", updated_cigar)
+
+
+
+
+
                     print(f"updated_cigar_D                   {updated_cigar_D}")
                     print("Final cigar before change_D (length): ", calculate_sequence_length_by_cigar(updated_cigar_D))
                     print(f"Final cigar after change:         {updated_cigar}")
@@ -174,6 +198,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
                     read.cigar = cigar_string_to_cigartuples(updated_cigar)
                     read.reference_start = start_pos
+
+                    assert(len(sequence) == calculate_sequence_length_by_cigar(updated_cigar))
 
 
                     output.write(read)
@@ -223,7 +249,71 @@ def pad_alignment_with_sc(cigar, q_pos, q_end, r_pos, r_end, expected_length, st
     return padded_cigar, start_pos
 
 
+def convert_aligned_to_cigar(aligned, seq1_len, seq2_len):
+    target_aligned, query_aligned = aligned
+    cigar = []
+    adjusted_start_pos = 0  # This will store the adjusted start position based on initial target insertions
+
+    # Helper function to add operation to CIGAR
+    def add_op(op, length):
+        if length > 0:
+            cigar.append(f"{length}{op}")
+
+    last_target_end, last_query_end = 0, 0
+    first_time = True
+    for (t_start, t_end), (q_start, q_end) in zip(target_aligned, query_aligned):
+        # Handle gaps before this aligned segment
+        t_gap = t_start - last_target_end
+        q_gap = q_start - last_query_end
+
+        # Determine initial soft clipping for the query and adjust start_pos for target insertions
+        if first_time:
+            first_time = False
+            if t_gap > 0:
+                adjusted_start_pos = t_gap
+            if q_gap > 0:
+                add_op('S', q_gap)
+
+        # Adjust for gaps at the beginning of alignment segments
+        elif t_gap > 0 or q_gap > 0:
+            # If there's a gap in target (deletion relative to query)
+            if t_gap > q_gap:
+                add_op('D', t_gap - q_gap)
+            # If there's a gap in query (insertion relative to target)
+            elif q_gap > t_gap:
+                add_op('I', q_gap - t_gap)
+
+        # Add matched segment
+        segment_length = min(t_end - t_start, q_end - q_start)
+        add_op('M', segment_length)
+
+        # Update last processed positions
+        last_target_end, last_query_end = t_end, q_end
+
+    # Handle gaps after the last aligned segment
+    if last_target_end < seq1_len:
+        add_op('D', seq1_len - last_target_end)
+    if last_query_end < seq2_len:
+        add_op('S', seq2_len - last_query_end)  # Treat remaining query as soft clipped
+
+    print(f"adjusted_start_pos: {adjusted_start_pos}")
+    return adjusted_start_pos, ''.join(cigar), query_aligned[0][0], target_aligned[0][0]
+
+def run_alignment_biopyhon(fa_seq, sequence, start_pos, sc_length, del_length, aligner):
+    # Perform the alignment between two sequences
+    for alignment in aligner.align(fa_seq, sequence ):
+        # Print each alignment's score and the alignment itself
+        print("Score = %.1f:" % alignment.score)
+        start_pos_adjust, cigar, q_start, r_start = convert_aligned_to_cigar(alignment.aligned, len(fa_seq), len(sequence))
+        print(F"aliged = {alignment.aligned}")
+        print(f"Cigar = {cigar}")
+        print(alignment)
+        start_pos = start_pos - sc_length - del_length + start_pos_adjust
+        return alignment.score, cigar, start_pos, q_start, r_start
+
+
 def run_alignment(fa_seq, sequence, start_pos, sc_length, sw):
+
                 alignment = sw.align(fa_seq, sequence)
                 with io.StringIO() as file:
                     alignment.dump(out=file)
@@ -263,22 +353,24 @@ def insert_operation_into_cigar(cigar, position, op_size, op_type):
     i=0
     while i<len(parsed_cigar):
         count, op = parsed_cigar[i]
+        skip_operation = False
+        if op_type == 'D':  # Increment accumulated_length except for 'D' operation in when the position is by the query
+            if op == 'I' or op == 'S':
+                skip_operation = True
+        elif op_type == 'I':  # Increment accumulated_length except for 'I' operation in when the position is by the reference
+            if op == 'D':
+                skip_operation = True
+
         if op in 'MIDS' and not operation_inserted:
-            if accumulated_length < position <= accumulated_length + count:
-                operation_inserted = True
+            if (not skip_operation) and (accumulated_length < position <= accumulated_length + count):
                 # Split the operation at the insertion/deletion position
+                operation_inserted = True
                 if op == op_type:
                     # merge the operations
                     new_cigar_ops.append((op_size+count, op_type))
-                if op == 'S':
+                elif op == 'S':
                     # merge the operations
                     new_cigar_ops.append((op_size+count, 'S'))
-                # elif op in ['D','I'] and op_type in ['D','I']:
-                #     # subtract the size of the operations
-                #     if count > op_size:
-                #         new_cigar_ops.append((count-op_size, op))
-                #     else:
-                #         new_cigar_ops.append((op_size-count, op_type))
                 else:
                     # Insert the operation
                     before_pos = position - accumulated_length
@@ -292,25 +384,18 @@ def insert_operation_into_cigar(cigar, position, op_size, op_type):
                             # merge the operations
                             new_cigar_ops.append((op_size+parsed_cigar[i+1][0], op_type))
                             i = i + 1
-                        # elif i+1 < len(parsed_cigar) and parsed_cigar[i+1][1] in ['D','I']:
-                        #     if op_type in ['D','I']:
-                        #         # subtract the size of the operations
-                        #         if parsed_cigar[i+1][0] > op_size:
-                        #             new_cigar_ops.append((parsed_cigar[i+1][0]-op_size, parsed_cigar[i+1][1]))
-                        #             i = i + 1
-                        #         else:
-                        #             new_cigar_ops.append((op_size-parsed_cigar[i+1][0], op_type))
-                        #             i = i + 1
                         else:
                             new_cigar_ops.append((op_size, op_type))
                     elif after_pos > 0:
                         new_cigar_ops.append((op_size, op_type))
                         new_cigar_ops.append((after_pos, op))
+
             else:
                 new_cigar_ops.append((count, op))
 
-            if op != 'I':  # Increment accumulated_length except for 'I' operation
+            if not skip_operation:
                 accumulated_length += count
+
         else:
             new_cigar_ops.append((count, op))
         i=i+1
@@ -324,10 +409,27 @@ def insert_operation_into_cigar(cigar, position, op_size, op_type):
     return updated_cigar
 
 # # usage
-cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9_69449415_69450719.bam"
-output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9_69449415_69450719.bam"
+# cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9_69449415_69450719.bam"
+# output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9_69449415_69450719.bam"
+# reference_path = "/data/Homo_sapiens_assembly38.fasta"
+# find_homopolymers(cram_path, output_path, reference_path)
+#
+
+cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9.bam"
+output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9.bam"
 reference_path = "/data/Homo_sapiens_assembly38.fasta"
 find_homopolymers(cram_path, output_path, reference_path)
+
+
+# cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9_275409_339530.bam"
+# output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9_275409_339530.bam"
+# reference_path = "/data/Homo_sapiens_assembly38.fasta"
+# find_homopolymers(cram_path, output_path, reference_path)
+
+# cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9_1_275409.bam"
+# output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9_1_275409.bam"
+# reference_path = "/data/Homo_sapiens_assembly38.fasta"
+# find_homopolymers(cram_path, output_path, reference_path)
 
 
 
