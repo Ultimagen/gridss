@@ -88,7 +88,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
     # Create a new PairwiseAligner object
     global_aligner = Align.PairwiseAligner()
-
+    global_aligner.mode = 'global'
     global_aligner.match_score = match
     global_aligner.mismatch_score = mismatch
     # Set gap scoring
@@ -100,6 +100,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
     global_aligner.query_end_gap_score = sc_penalty
 
     local_aligner = Align.PairwiseAligner()
+    local_aligner.mode = 'local'
     local_aligner.match_score = match
     local_aligner.mismatch_score = mismatch
     # Set gap scoring
@@ -116,6 +117,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
     count_orig_glob = 0
     count_rev_local = 0
     count_rev_glob = 0
+
+    read_names_for_debugging = []
 
     with pysam.AlignmentFile(cram_path) as cram:
         with pysam.AlignmentFile(output_path, mode='wb', header=cram.header) as output:
@@ -151,6 +154,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                 if len(start_end_del_tuples)>0 or len(ref_start_end_del_tuples)>0:
                     # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
                     count_homopolymere += 1
+                    read_names_for_debugging.append(read.query_name)
                     print(f"Original sequence:  {sequence}")
                     print(f"Edited sequence:    {edited_sequence}")
 
@@ -298,6 +302,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     print("\n")
                     output.write(read)
 
+    print(f"Read names for debugging: {read_names_for_debugging}")
     print(f"Total reads: {count}")
     print(f"Total homopolymer reads: {count_homopolymere}")
     print(f"Total reads where original sequence is better: {count_orig_glob}")
@@ -388,9 +393,9 @@ def convert_aligned_to_cigar(aligned, seq1_len, seq2_len):
         # Update last processed positions
         last_target_end, last_query_end = t_end, q_end
 
-    # Handle gaps after the last aligned segment
-    if last_target_end < seq1_len:
-        add_op('D', seq1_len - last_target_end)
+    # Handle gaps after the last aligned segment - add soft-clipping for the remaining query
+    # if last_target_end < seq1_len and last_query_end < seq2_len:
+    #     add_op('D', seq1_len - last_target_end)
     if last_query_end < seq2_len:
         add_op('S', seq2_len - last_query_end)  # Treat remaining query as soft clipped
 
@@ -519,10 +524,10 @@ def insert_operation_into_cigar(cigar, position, op_size, op_type):
 # find_homopolymers(cram_path, output_path, reference_path)
 #
 
-# cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9.bam"
-# output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9.bam"
-# reference_path = "/data/Homo_sapiens_assembly38.fasta"
-# find_homopolymers(cram_path, output_path, reference_path)
+cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9.bam"
+output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9.bam"
+reference_path = "/data/Homo_sapiens_assembly38.fasta"
+find_homopolymers(cram_path, output_path, reference_path)
 
 
 # cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9_6790002_6790202.bam"
@@ -538,10 +543,10 @@ def insert_operation_into_cigar(cigar, position, op_size, op_type):
 # reference_path = "/data/Homo_sapiens_assembly38.fasta"
 # find_homopolymers(cram_path, output_path, reference_path)
 
-cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9_1_275409.bam"
-output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9_1_275409.bam"
-reference_path = "/data/Homo_sapiens_assembly38.fasta"
-find_homopolymers(cram_path, output_path, reference_path)
+# cram_path = "/data/deepvariants/gridss/030945_merged_assembly_chr9_1_275409.bam"
+# output_path = "/data/deepvariants/gridss/homopolymeres_030945_merged_assembly_chr9_1_275409.bam"
+# reference_path = "/data/Homo_sapiens_assembly38.fasta"
+# find_homopolymers(cram_path, output_path, reference_path)
 
 
 
