@@ -125,7 +125,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     continue  # Skip reads without a query sequence
 
                 # Search for homopolymers in the sequence
-                edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence, homopolymer_length, read.query_name)
+                edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence, homopolymer_length)
 
                 #Search for homopolymer in the reference
                 sc_length = 0
@@ -133,16 +133,14 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     # the read is soft clipped
                     sc_length = read.cigartuples[0][1]
                 fa_seq = reference[read.reference_name][read.reference_start - sc_length - 0 : read.reference_start + len(sequence) - sc_length].seq.upper()
-                edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq, homopolymer_length, "ref of" + read.query_name)
+                edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq, homopolymer_length)
 
                 if ref_del_length > del_length:
 
                     fa_seq = reference[read.reference_name][
                              read.reference_start - sc_length: read.reference_start + len(
                                  sequence) - sc_length + ref_del_length - del_length].seq.upper()
-                    edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
-                                                                                                       homopolymer_length,
-                                                                                                       "ref of" + read.query_name)
+                    edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,homopolymer_length)
 
 
                 if len(start_end_del_tuples)>0 or len(ref_start_end_del_tuples)>0:
@@ -150,7 +148,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     count_homopolymere += 1
                     # run alignment on original sequence
                     score_orig_glob, cigar_orig_glob, start_pos_glob, q_start_glob, r_start_glob = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, 0, global_aligner)
-                    score_orig_local, cigar_orig_local, start_pos_local, q_start_local, r_start_local = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, 0, local_aligner,'local')
+                    score_orig_local, cigar_orig_local, start_pos_local, q_start_local, r_start_local = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, 0, local_aligner)
                     penalize_times = cigar_orig_local.count('S')
                     if score_orig_glob >= score_orig_local + sc_penalty * penalize_times:
                         score_orig = score_orig_glob
@@ -171,7 +169,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     rev_comp_edited_sequence = reverse_complement(edited_sequence)
                     score_rev_glob, cigar_rev_glob, start_pos_rev_glob, q_start_rev_glob, r_start_rev_glob = run_alignment_biopyhon(edited_fa_seq, rev_comp_edited_sequence, read.reference_start, sc_length, 0, global_aligner)
 
-                    score_rev_local, cigar_rev_local, start_pos_rev_local,  q_start_rev_local, r_start_rev_local = run_alignment_biopyhon(edited_fa_seq, rev_comp_edited_sequence,read.reference_start, sc_length, 0, local_aligner, 'local')#TODO
+                    score_rev_local, cigar_rev_local, start_pos_rev_local,  q_start_rev_local, r_start_rev_local = run_alignment_biopyhon(edited_fa_seq, rev_comp_edited_sequence,read.reference_start, sc_length, 0, local_aligner)
 
                     penalize_times = cigar_rev_local.count('S')
                     if score_rev_glob >= score_rev_local + sc_penalty * penalize_times:
