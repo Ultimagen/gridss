@@ -47,6 +47,7 @@ def cigar_string_to_cigartuples(cigar_string):
 
 def remove_long_homopolymers(sequence, homopolymer_length=10, read_name=""):
     i = 0
+    del_length = 0
     edited_sequence = ""
     start_end_del_tuples = []
     while i < len(sequence):
@@ -60,13 +61,14 @@ def remove_long_homopolymers(sequence, homopolymer_length=10, read_name=""):
             edited_sequence += sequence[i] * homopolymer_length
             i += count
             start_end_del_tuples.append((i - (count - homopolymer_length) , i))
+            del_length += count - homopolymer_length
         elif count > 1:
             edited_sequence += sequence[i] * count
             i += count
         else:
             edited_sequence += sequence[i]
             i += 1
-    return edited_sequence, start_end_del_tuples
+    return edited_sequence, start_end_del_tuples, del_length
 
 
 def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10):
@@ -126,17 +128,24 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     continue  # Skip reads without a query sequence
 
                 # Search for homopolymers in the sequence
-                edited_sequence, start_end_del_tuples = remove_long_homopolymers(read.query_sequence, homopolymer_length, read.query_name)
+                edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence, homopolymer_length, read.query_name)
 
                 #Search for homopolymer in the reference
                 sc_length = 0
-                del_length = 0
                 if read.cigartuples[0][0] == 4:
                     # the read is soft clipped
                     sc_length = read.cigartuples[0][1]
-                    del_length = start_end_del_tuples[0][1] - start_end_del_tuples[0][0] if len(start_end_del_tuples)>0 else 0
-                fa_seq = reference[read.reference_name][read.reference_start - sc_length - del_length : read.reference_start + len(sequence) - sc_length].seq.upper()
-                edited_fa_seq, ref_start_end_del_tuples = remove_long_homopolymers(fa_seq, homopolymer_length, "ref of" + read.query_name)
+                fa_seq = reference[read.reference_name][read.reference_start - sc_length - 0 : read.reference_start + len(sequence) - sc_length].seq.upper()
+                edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq, homopolymer_length, "ref of" + read.query_name)
+
+                if ref_del_length > del_length:
+
+                    fa_seq = reference[read.reference_name][
+                             read.reference_start - sc_length: read.reference_start + len(
+                                 sequence) - sc_length + ref_del_length - del_length].seq.upper()
+                    edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
+                                                                                                       homopolymer_length,
+                                                                                                       "ref of" + read.query_name)
 
 
                 if len(start_end_del_tuples)>0 or len(ref_start_end_del_tuples)>0:
@@ -152,12 +161,12 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
 
 
                     print("Running alignment on original sequence")
-                    print("Runing global alignment")
-                    score_orig_glob, cigar_orig_glob, start_pos_glob, q_start_glob, r_start_glob = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, del_length, global_aligner)
+                    print("Running global alignment")
+                    score_orig_glob, cigar_orig_glob, start_pos_glob, q_start_glob, r_start_glob = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, 0, global_aligner)
                     print("orig global cigar ", cigar_orig_glob)
                     print("orig global cigar (length):", calculate_sequence_length_by_cigar(cigar_orig_glob))
-                    print("Runing local alignment")
-                    score_orig_local, cigar_orig_local, start_pos_local, q_start_local, r_start_local = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, del_length, local_aligner,'local')
+                    print("Running local alignment")
+                    score_orig_local, cigar_orig_local, start_pos_local, q_start_local, r_start_local = run_alignment_biopyhon(edited_fa_seq, edited_sequence, read.reference_start, sc_length, 0, local_aligner,'local')
                     print("orig local cigar ", cigar_orig_local)
                     print("orig local cigar (length):", calculate_sequence_length_by_cigar(cigar_orig_local))
                     penalize_times = cigar_orig_local.count('S')
@@ -182,11 +191,11 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     print("Running alignment on reverse complement sequence")
                     rev_comp_edited_sequence = reverse_complement(edited_sequence)
                     print(f"Running rev global")
-                    score_rev_glob, cigar_rev_glob, start_pos_rev_glob, q_start_rev_glob, r_start_rev_glob = run_alignment_biopyhon(edited_fa_seq, rev_comp_edited_sequence, read.reference_start, sc_length, del_length, global_aligner)
+                    score_rev_glob, cigar_rev_glob, start_pos_rev_glob, q_start_rev_glob, r_start_rev_glob = run_alignment_biopyhon(edited_fa_seq, rev_comp_edited_sequence, read.reference_start, sc_length, 0, global_aligner)
                     print("rev global cigar ", cigar_rev_glob)
                     print("rev global cigar (length):", calculate_sequence_length_by_cigar(cigar_rev_glob))
                     print(f"Running rev local")
-                    score_rev_local, cigar_rev_local, start_pos_rev_local,  q_start_rev_local, r_start_rev_local = run_alignment_biopyhon(edited_fa_seq, rev_comp_edited_sequence,read.reference_start, sc_length, del_length, local_aligner, 'local')#TODO
+                    score_rev_local, cigar_rev_local, start_pos_rev_local,  q_start_rev_local, r_start_rev_local = run_alignment_biopyhon(edited_fa_seq, rev_comp_edited_sequence,read.reference_start, sc_length, 0, local_aligner, 'local')#TODO
                     print("rev local cigar ", cigar_rev_local)
                     print("rev local cigar (length):", calculate_sequence_length_by_cigar(cigar_rev_local))
                     penalize_times = cigar_rev_local.count('S')
@@ -207,13 +216,15 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     print(f"score of rev SW:    {score_rev}")
 
                     if score_orig >= score_rev:
-                        print("Original sequence is better")
+
                         score = score_orig
                         cigar = cigar_orig
                         updated_seq = edited_sequence
                         if chosen_orig == 1:
+                            print("Global Original sequence is better")
                             count_orig_glob += 1
                         else:
+                            print("Local Original sequence is better")
                             count_orig_local += 1
                     else:
                         print("Reverse complement sequence is better")
@@ -253,7 +264,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     print(f"ref start_end_del_tuples: {ref_start_end_del_tuples}")
                     print(f"                             {updated_cigar}")
                     for start_del, end_del in ref_start_end_del_tuples:
-                        updated_cigar = insert_operation_into_cigar(updated_cigar, start_del - r_start + q_start, end_del - start_del, 'D')
+                        updated_cigar = insert_operation_into_cigar(updated_cigar, start_del - r_start, end_del - start_del, 'D')
                         print(f"start_del: {start_del}, end_del: {end_del}, cigar_length: {calculate_sequence_length_by_cigar(updated_cigar)} ", updated_cigar)
 
 
