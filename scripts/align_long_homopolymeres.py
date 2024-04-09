@@ -121,8 +121,9 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
             for read in cram.fetch():
                 count += 1
                 sequence = read.query_sequence
-                if sequence is None:
-                    continue  # Skip reads without a query sequence
+
+                if sequence is None or 'Y' in sequence:
+                    continue  # Skip reads without a query sequence, or with ambiguous bases
 
                 # Search for homopolymers in the sequence
                 edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence, homopolymer_length)
@@ -146,8 +147,6 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                 if len(start_end_del_tuples)>0 or len(ref_start_end_del_tuples)>0:
                     # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
                     count_homopolymere += 1
-                    print(
-                        f"Read {read.query_name}")
                     # print(start_end_del_tuples)
                     #
                     # print(f"Original sequence:  {sequence}")
@@ -483,6 +482,13 @@ cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1.bam"
 output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1.bam"
 reference_path = "/data/Homo_sapiens_assembly38.fasta"
 find_homopolymers(cram_path, output_path, reference_path)
+
+# cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1_248745192_248765192.bam"
+# output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1_248745192_248765192.bam"
+# reference_path = "/data/Homo_sapiens_assembly38.fasta"
+#
+# find_homopolymers(cram_path, output_path, reference_path)
+
 
 # cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned.bam"
 # output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted.bam"
