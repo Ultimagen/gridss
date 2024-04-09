@@ -146,8 +146,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                 if len(start_end_del_tuples)>0 or len(ref_start_end_del_tuples)>0:
                     # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
                     count_homopolymere += 1
-                    # print(
-                    #     f"Read {read.query_name}")
+                    print(
+                        f"Read {read.query_name}")
                     # print(start_end_del_tuples)
                     #
                     # print(f"Original sequence:  {sequence}")
@@ -216,6 +216,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                         else:
                             count_orig_local += 1
                     else:
+                        print(
+                             f"rev Read {read.query_name}")
                         score = score_rev
                         cigar = cigar_rev
                         edited_seq = rev_comp_edited_sequence
@@ -353,6 +355,7 @@ def run_alignment_biopyhon(fa_seq, sequence, start_pos, sc_length, del_length, a
         # print(f"Cigar = {cigar}")
         # print(alignment)
         return alignment.score, cigar, start_pos, q_start, r_start
+    return 0, "", 0, 0, 0
 
 
 def reverse_complement(seq):
@@ -471,10 +474,15 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
 # find_homopolymers(cram_path, output_path, reference_path)
 
 
-# cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1.bam"
-# output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1.bam"
+# cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1_94734178_94934178.bam"
+# output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1_94734178_94934178.bam"
 # reference_path = "/data/Homo_sapiens_assembly38.fasta"
 # find_homopolymers(cram_path, output_path, reference_path)
+
+cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1.bam"
+output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1.bam"
+reference_path = "/data/Homo_sapiens_assembly38.fasta"
+find_homopolymers(cram_path, output_path, reference_path)
 
 # cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned.bam"
 # output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted.bam"
