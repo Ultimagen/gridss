@@ -478,10 +478,10 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
 # reference_path = "/data/Homo_sapiens_assembly38.fasta"
 # find_homopolymers(cram_path, output_path, reference_path)
 
-cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1.bam"
-output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1.bam"
-reference_path = "/data/Homo_sapiens_assembly38.fasta"
-find_homopolymers(cram_path, output_path, reference_path)
+# cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1.bam"
+# output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1.bam"
+# reference_path = "/data/Homo_sapiens_assembly38.fasta"
+# find_homopolymers(cram_path, output_path, reference_path)
 
 # cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1_248745192_248765192.bam"
 # output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1_248745192_248765192.bam"
