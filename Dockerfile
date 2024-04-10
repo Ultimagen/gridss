@@ -25,7 +25,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& pip3 install pysam \
 	&& pip3 install biopython \
-	&& pip install pyfaidx
+	&& pip3 install pyfaidx \
+	&& pip3 install joblib
 
 # compile gridsstools
 FROM gridss_c_build_environment AS gridss_builder_c

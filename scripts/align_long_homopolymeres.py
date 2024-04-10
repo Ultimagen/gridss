@@ -3,6 +3,8 @@ import pyfaidx
 import argparse
 import re
 from Bio import Align
+from joblib import Parallel, delayed
+import os
 
 
 
@@ -71,7 +73,7 @@ def remove_long_homopolymers(sequence, homopolymer_length=10):
     return edited_sequence, start_end_del_tuples, del_length
 
 
-def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10):
+def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10, contig = None):
     # Open the CRAM file
     reference = pyfaidx.Fasta(reference_path)
 
@@ -118,7 +120,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
         with pysam.AlignmentFile(output_path, mode='wb', header=cram.header) as output:
             # Iterate over the reads in the CRAM file
 
-            for read in cram.fetch():
+            for read in cram.fetch(contig):
                 count += 1
                 sequence = read.query_sequence
 
@@ -147,6 +149,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                 if len(start_end_del_tuples)>0 or len(ref_start_end_del_tuples)>0:
                     # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
                     count_homopolymere += 1
+                    print(
+                        f"Read {read.query_name}")
                     # print(start_end_del_tuples)
                     #
                     # print(f"Original sequence:  {sequence}")
@@ -344,6 +348,8 @@ def convert_aligned_to_cigar(aligned, seq2_len):
 
 def run_alignment_biopyhon(fa_seq, sequence, start_pos, sc_length, del_length, aligner):
     # Perform the alignment between two sequences
+    if len(fa_seq) == 0 or len(sequence) == 0:
+        return 0, "", 0, 0, 0
     for alignment in aligner.align(fa_seq, sequence ):
 
         # Print each alignment's score and the alignment itself
@@ -500,12 +506,59 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
 # reference_path = "/data/Homo_sapiens_assembly38.fasta"
 # find_homopolymers(cram_path, output_path, reference_path)
 
+# cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chrY_19000000_23000000.bam"
+# output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chrY_19000000_23000000.bam"
+# reference_path = "/data/Homo_sapiens_assembly38.fasta"
+# find_homopolymers(cram_path, output_path, reference_path)
+
+
 
 parser = argparse.ArgumentParser(description='Find homopolymeres in reads and realign them using Smith-Waterman algorithm with affine gap penalties and soft clipping')
 parser.add_argument('--input', required=True, help='The input CRAM file')
 parser.add_argument('--output', required=True, help='The output CRAM file')
 parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
 parser.add_argument('--homopolymer_length', type=int, default=10, help='The length of homopolymeres to search for')
+parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
 args = parser.parse_args()
 
-find_homopolymers(args.input, args.output, args.reference, args.homopolymer_length)
+MIN_CONTIG_LENGTH = 100000
+with pysam.AlignmentFile(args.input, "rc") as cram_file:
+    # Get the list of contig names
+    contigs = cram_file.references
+    # Get the list of contig lengths
+    contig_lengths = cram_file.lengths
+    contigs = [
+        contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
+    ]
+
+
+    Parallel(n_jobs=args.n_jobs, max_nbytes=None)(
+        delayed(find_homopolymers)(
+            args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig
+        )
+        for contig in contigs
+    )
+    # sort and index the contig files
+    for contig in contigs:
+        pysam.sort("-o", f"{args.output}{contig}_sorted.bam", f"{args.output}{contig}.bam")
+        pysam.index(f"{args.output}{contig}_sorted.bam")
+
+    # merge the contig file together
+    with pysam.AlignmentFile(args.output, mode='wb', header=cram_file.header) as output:
+        for contig in contigs:
+            with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
+                for read in contig_file:
+                    output.write(read)
+
+
+    # remove the contig files
+    for contig in contigs:
+        os.remove(f"{args.output}{contig}.bam")
+        os.remove(f"{args.output}{contig}_sorted.bam")
+        os.remove(f"{args.output}{contig}_sorted.bam.bai")
+
+    pysam.index(args.output)
+
+
+
+# find_homopolymers(args.input, args.output, args.reference, args.homopolymer_length)
