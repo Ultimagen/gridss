@@ -9,6 +9,81 @@ import os
 
 
 
+def merge_similar_operations(cigar):
+    """
+    Merges consecutive operations of the same type.
+    """
+    merged_cigar = []
+    last_op = None
+    last_length = 0
+
+    # Extract operations and their lengths
+    for length, op in re.findall(r'(\d+)([MID])', cigar):
+        length = int(length)
+        if op == last_op:
+            last_length += length
+        else:
+            if last_op is not None:
+                merged_cigar.append(f"{last_length}{last_op}")
+            last_length = length
+            last_op = op
+
+    # Don't forget to add the last operation
+    if last_op is not None:
+        merged_cigar.append(f"{last_length}{last_op}")
+
+    return ''.join(merged_cigar)
+
+
+def merge_similar_operations(cigar):
+    """
+    Merges consecutive operations of the same type in a CIGAR string.
+    """
+    merged_cigar = []
+    last_op = None
+    last_length = 0
+
+    for length, op in re.findall(r'(\d+)([MIDNSHP=X])', cigar):
+        length = int(length)
+        if op == last_op:
+            last_length += length
+        else:
+            if last_op is not None:
+                merged_cigar.append(f"{last_length}{last_op}")
+            last_op = op
+            last_length = length
+
+    if last_op is not None:
+        merged_cigar.append(f"{last_length}{last_op}")
+
+    return ''.join(merged_cigar)
+
+def adjust_and_merge_cigar(cigar):
+    """
+    Adjusts for alternating deletion-insertion sequences, merges similar adjacent operations,
+    and ensures preservation of terminal operations.
+    """
+    def calculate_adjustment(match):
+        length1, op1, length2, op2 = match.groups()
+        length1, length2 = int(length1), int(length2)
+
+        if op1 == op2:
+            return f"{length1 + length2}{op1}"
+        else:
+            overlap = min(length1, length2)
+            leftover = abs(length1 - length2)
+            adjusted_sequence = f'{overlap}M'
+            if leftover > 0:
+                leftover_op = op1 if length1 > length2 else op2
+                adjusted_sequence += f'{leftover}{leftover_op}'
+            return adjusted_sequence
+
+    adjusted_cigar = re.sub(r'(\d+)([DI])(\d+)([DI])', calculate_adjustment, cigar)
+    merged_cigar = merge_similar_operations(adjusted_cigar)
+
+    return merged_cigar
+
+
 ## ONLY FOR DEBUGGING
 def calculate_sequence_length_by_cigar(cigar_string):
     # Regular expression to find numbers followed by CIGAR operation characters
@@ -48,6 +123,8 @@ def cigar_string_to_cigartuples(cigar_string):
         cigartuples.append((cigar_op_codes[op], int(length)))
 
     return cigartuples
+
+
 
 def remove_long_homopolymers(sequence, homopolymer_length=10):
     i = 0
@@ -149,8 +226,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                 if len(start_end_del_tuples)>0 or len(ref_start_end_del_tuples)>0:
                     # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
                     count_homopolymere += 1
-                    print(
-                        f"Read {read.query_name}")
+                    # print(
+                    #     f"Read {read.query_name}")
                     # print(start_end_del_tuples)
                     #
                     # print(f"Original sequence:  {sequence}")
@@ -263,8 +340,8 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     # print(f"Final cigar after change:         {updated_cigar}")
                     # print("Final cigar after change (length): ", calculate_sequence_length_by_cigar(updated_cigar))
                     # print("cigartuples: ", cigar_string_to_cigartuples(updated_cigar))
-
-                    read.cigar = cigar_string_to_cigartuples(updated_cigar)
+                    adjusted_cigar = adjust_and_merge_cigar(updated_cigar)
+                    read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
                     read.reference_start = start_pos
 
 
@@ -274,7 +351,11 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     assert(len(edited_sequence) == calculate_sequence_length_by_cigar(cigar_rev_glob) or calculate_sequence_length_by_cigar(cigar_rev_glob) == 0)
                     if not (len(sequence) == calculate_sequence_length_by_cigar(updated_cigar) or calculate_sequence_length_by_cigar(updated_cigar) == 0):
                         raise AssertionError(f"failed for read: {read.query_name}\ncigar: {updated_cigar}\ncigar_len:{calculate_sequence_length_by_cigar(updated_cigar)}\nseq_len:{len(sequence)}\nsequence: {sequence}\nedited_sequence: {edited_sequence}")
+                    if not (len(sequence) == calculate_sequence_length_by_cigar(adjusted_cigar) or calculate_sequence_length_by_cigar(adjusted_cigar) == 0):
+                        raise AssertionError(f"failed for read: {read.query_name}\ncigar: {adjusted_cigar}\ncigar_len:{calculate_sequence_length_by_cigar(adjusted_cigar)}\nseq_len:{len(sequence)}\nsequence: {sequence}\nedited_sequence: {edited_sequence}")
 
+                    print(
+                        f"Read {read.query_name} {updated_cigar}")
                     output.write(read)
                 else:
                     output.write(read)
@@ -510,6 +591,9 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
 # output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chrY_19000000_23000000.bam"
 # reference_path = "/data/Homo_sapiens_assembly38.fasta"
 # find_homopolymers(cram_path, output_path, reference_path)
+
+
+
 
 
 
