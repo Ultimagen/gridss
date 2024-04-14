@@ -335,6 +335,7 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                             count_rev_local += 1
                             # print("rev_local")
                         read.query_sequence  = reverse_complement(sequence)
+                        read.qual = 'B' * len(sequence)
 
 
                     # Insert deletions into the CIGAR string
@@ -383,13 +384,13 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                         read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
                     output.write(read)
 
-                is_valid, err_str = validate_cigar(adjusted_cigar)
-                if not is_valid:
-                    print(f"Invalid CIGAR string found in read {read.query_name}")
-                    print(f"CIGAR string: {adjusted_cigar}")
-                    print(f"Read sequence: {sequence}")
-                    print(err_str)
-                    break
+                # is_valid, err_str = validate_cigar(adjusted_cigar)
+                # if not is_valid:
+                #     print(f"Invalid CIGAR string found in read {read.query_name}")
+                #     print(f"CIGAR string: {adjusted_cigar}")
+                #     print(f"Read sequence: {sequence}")
+                #     print(err_str)
+
 
     # print(f"Total reads: {count}")
     # print(f"Total homopolymer reads: {count_homopolymere}")
