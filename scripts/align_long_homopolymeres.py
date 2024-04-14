@@ -7,7 +7,29 @@ from joblib import Parallel, delayed
 import os
 
 
+def validate_cigar(cigar_string):
+    import re
 
+    # Regular expression to find sequences of digits followed by a character
+    pattern = re.compile(r'(\d+)([MIDNSHP=X])')
+    operations = pattern.findall(cigar_string)
+
+    # Loop through the operations to check for the specified conditions
+    last_op = None
+    last_count = None
+    for count, op in operations:
+        # Check for consecutive same operations
+        if last_op == op:
+            return False, f"{last_count}{last_op}{count}{op} is invalid"
+
+        # Check for insertion immediately followed by deletion or vice versa
+        if last_op in ('I', 'D') and op in ('I', 'D') and last_op != op:
+            return False, f"{last_count}{last_op}{count}{op} is invalid"
+
+        last_op = op
+        last_count = count
+
+    return True,""
 
 def merge_similar_operations(cigar):
     """
@@ -296,8 +318,6 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                         else:
                             count_orig_local += 1
                     else:
-                        print(
-                             f"rev Read {read.query_name}")
                         score = score_rev
                         cigar = cigar_rev
                         edited_seq = rev_comp_edited_sequence
@@ -354,19 +374,29 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     if not (len(sequence) == calculate_sequence_length_by_cigar(adjusted_cigar) or calculate_sequence_length_by_cigar(adjusted_cigar) == 0):
                         raise AssertionError(f"failed for read: {read.query_name}\ncigar: {adjusted_cigar}\ncigar_len:{calculate_sequence_length_by_cigar(adjusted_cigar)}\nseq_len:{len(sequence)}\nsequence: {sequence}\nedited_sequence: {edited_sequence}")
 
-                    print(
-                        f"Read {read.query_name} {updated_cigar}")
+                    # print(
+                    #     f"Read {read.query_name} {updated_cigar}")
                     output.write(read)
                 else:
+                    adjusted_cigar = adjust_and_merge_cigar(read.cigarstring)
+                    if adjusted_cigar!=read.cigarstring:
+                        read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
                     output.write(read)
-                # print("###########")
 
-    print(f"Total reads: {count}")
-    print(f"Total homopolymer reads: {count_homopolymere}")
-    print(f"Total reads where original sequence is better: {count_orig_glob}")
-    print(f"Total reads where original sequence is better (local): {count_orig_local}")
-    print(f"Total reads where reverse complement sequence is better: {count_rev_glob}")
-    print(f"Total reads where reverse complement sequence is better (local): {count_rev_local}")
+                is_valid, err_str = validate_cigar(adjusted_cigar)
+                if not is_valid:
+                    print(f"Invalid CIGAR string found in read {read.query_name}")
+                    print(f"CIGAR string: {adjusted_cigar}")
+                    print(f"Read sequence: {sequence}")
+                    print(err_str)
+                    break
+
+    # print(f"Total reads: {count}")
+    # print(f"Total homopolymer reads: {count_homopolymere}")
+    # print(f"Total reads where original sequence is better: {count_orig_glob}")
+    # print(f"Total reads where original sequence is better (local): {count_orig_local}")
+    # print(f"Total reads where reverse complement sequence is better: {count_rev_glob}")
+    # print(f"Total reads where reverse complement sequence is better (local): {count_rev_local}")
 
 
 
@@ -593,6 +623,14 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
 # find_homopolymers(cram_path, output_path, reference_path)
 
 
+# cram_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_chr1_5531251_5531251.bam"
+# output_path = "/data/deepvariants/gridss/030945_assembly_ua_realigned_long_homopolymeres_aligned_unsorted_chr1_5531251_5531251.bam"
+# reference_path = "/data/Homo_sapiens_assembly38.fasta"
+# find_homopolymers(cram_path, output_path, reference_path)
+
+
+
+
 
 
 
@@ -643,6 +681,3 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
 
     pysam.index(args.output)
 
-
-
-# find_homopolymers(args.input, args.output, args.reference, args.homopolymer_length)
