@@ -234,13 +234,13 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                 if read.cigartuples[0][0] == 4:
                     # the read is soft clipped
                     sc_length = read.cigartuples[0][1]
-                fa_seq = reference[read.reference_name][read.reference_start - sc_length - 0 : read.reference_start + len(sequence) - sc_length].seq.upper()
+                fa_seq = reference[read.reference_name][max(read.reference_start - sc_length,0): read.reference_start + len(sequence) - sc_length].seq.upper()
                 edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq, homopolymer_length)
 
                 if ref_del_length > del_length:
 
                     fa_seq = reference[read.reference_name][
-                             read.reference_start - sc_length: read.reference_start + len(
+                             max(read.reference_start - sc_length, 0): read.reference_start + len(
                                  sequence) - sc_length + ref_del_length - del_length].seq.upper()
                     edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,homopolymer_length)
 
@@ -251,7 +251,6 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     # print(
                     #     f"Read {read.query_name}")
                     # print(start_end_del_tuples)
-                    #
                     # print(f"Original sequence:  {sequence}")
                     # print(f"Edited sequence:    {edited_sequence}")
                     #
@@ -363,7 +362,12 @@ def find_homopolymers(cram_path, output_path, reference_path, homopolymer_length
                     # print("cigartuples: ", cigar_string_to_cigartuples(updated_cigar))
                     adjusted_cigar = adjust_and_merge_cigar(updated_cigar)
                     read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
-                    read.reference_start = start_pos
+                    # edge case when the start position is negative
+                    # Can happen when the read is soft clipped at the beginning of the chromosome
+                    if read.reference_start - sc_length < 0:
+                        read.reference_start = start_pos - (read.reference_start - sc_length)
+                    else:
+                        read.reference_start = start_pos
 
 
                     assert (len(edited_sequence) == calculate_sequence_length_by_cigar(cigar_orig_local) or calculate_sequence_length_by_cigar(cigar_orig_local) == 0)
@@ -469,8 +473,8 @@ def run_alignment_biopyhon(fa_seq, sequence, start_pos, sc_length, del_length, a
 
         start_pos = start_pos - sc_length - del_length + start_pos_adjust
 
-        # print(f"Cigar = {cigar}")
-        # print(alignment)
+        #print(f"Cigar = {cigar}")
+        #print(alignment)
         return alignment.score, cigar, start_pos, q_start, r_start
     return 0, "", 0, 0, 0
 
