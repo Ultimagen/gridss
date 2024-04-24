@@ -115,8 +115,10 @@ cigar_op_codes = {
     'H': 5,  # BAM_CHARD_CLIP
     'P': 6,  # BAM_CPAD
     '=': 7,  # BAM_CEQUAL
-    'X': 8   # BAM_CDIFF
+    'X': 8  # BAM_CDIFF
 }
+
+
 # ONLY FOR DEBUGGING
 def cigar_string_to_cigartuples(cigar_string, convert_int=True):
     """
@@ -256,8 +258,9 @@ def align_and_choose(read, sequence, global_aligner, local_aligner, fa_seq, edit
         start_end_del_tuples.reverse()
         choice = 2 if chosen_rev == 1 else 3
 
-        read.qual = read.qual[::-1]
+        read_qual = read.qual
         read.query_sequence = str(Seq(sequence).reverse_complement())
+        read.qual = read_qual[::-1]
 
     return read, cigar, start_pos, r_start, choice, start_end_del_tuples
 
