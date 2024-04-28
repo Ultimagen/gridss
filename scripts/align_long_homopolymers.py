@@ -1,20 +1,6 @@
-#!/env/python
-# Copyright 2022 Ultima Genomics Inc.
-#
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
-#
-#        http://www.apache.org/licenses/LICENSE-2.0
-#
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
 # DESCRIPTION
-#    This script finds homopolymeres in reads and realigns them using Smith-Waterman algorithm with affine gap penalties and soft clipping
-# CHANGELOG in reverse chronological order
+#    This script realigns haplotypes in the areas that contain long homopolymer runs,
+#    where UG data introduces false variation due to the limit on calling homopolymer length
 
 import pysam
 import pyfaidx
@@ -27,7 +13,7 @@ import logging
 from Bio.Seq import Seq
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
-logger = logging.getLogger(__name__ if __name__ != "__main__" else "align_long_homopolymeres")
+logger = logging.getLogger(__name__ if __name__ != "__main__" else "align_long_homopolymers")
 
 
 def adjust_and_merge_cigar(cigar):
@@ -144,9 +130,9 @@ def cigar_string_to_cigartuples(cigar_string, convert_int=True):
 
 def remove_long_homopolymers(sequence, homopolymer_length=10):
     """
-    Remove long homopolymeres from the sequence and replace them with a homopolymer of length homopolymer_length
+    Remove long homopolymers from the sequence and replace them with a homopolymer of length homopolymer_length
     @param sequence: The sequence to edit
-    @param homopolymer_length: The length of homopolymeres to search for
+    @param homopolymer_length: The length of homopolymers to search for
     @return: The edited sequence, the start and end positions of the deletions, and the total length of deletions
     """
     i = 0
@@ -265,13 +251,13 @@ def align_and_choose(read, sequence, global_aligner, local_aligner, fa_seq, edit
     return read, cigar, start_pos, r_start, choice, start_end_del_tuples
 
 
-def realign_homopolymeres(cram_path, output_path, reference_path, homopolymer_length=10, contig=None):
+def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10, contig=None):
     """
-    Find and realign homopolymeres in reads in a CRAM file
+    Find and realign homopolymers in reads in a CRAM file
     @param cram_path: The input CRAM file
     @param output_path: The output CRAM file
     @param reference_path: The reference genome FASTA file
-    @param homopolymer_length: The length of homopolymeres to search for
+    @param homopolymer_length: The length of homopolymers to search for
     @param contig: The contig to process
     """
     # Open the CRAM file
@@ -300,24 +286,24 @@ def realign_homopolymeres(cram_path, output_path, reference_path, homopolymer_le
             for read in cram.fetch(contig):
                 count += 1
                 sequence = read.query_sequence
-                if sequence is None or not all(c in 'atgc' for c in sequence.lower()):
-                    continue  # Skip reads without a query sequence, or with ambiguous bases
+                # Skip reads without a query sequence, or with ambiguous bases
+                skip_read = sequence is None or not all(c in 'atgc' for c in sequence.lower())
+                if not skip_read:
+                    # Search for homopolymers in the sequence
+                    edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence,
+                                                                                                 homopolymer_length)
+                    # Search for homopolymer in the reference
+                    sc_length = 0
+                    if read.cigartuples[0][0] == 4:
+                        # the read is soft clipped
+                        sc_length = read.cigartuples[0][1]
+                    fa_seq = reference[read.reference_name][
+                             max(read.reference_start - sc_length, 0): read.reference_start + len(
+                                 sequence) - sc_length].seq.upper()
+                    edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
+                                                                                                       homopolymer_length)
 
-                # Search for homopolymers in the sequence
-                edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence,
-                                                                                             homopolymer_length)
-                # Search for homopolymer in the reference
-                sc_length = 0
-                if read.cigartuples[0][0] == 4:
-                    # the read is soft clipped
-                    sc_length = read.cigartuples[0][1]
-                fa_seq = reference[read.reference_name][
-                         max(read.reference_start - sc_length, 0): read.reference_start + len(
-                             sequence) - sc_length].seq.upper()
-                edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
-                                                                                                   homopolymer_length)
-
-                if ref_del_length > del_length:
+                if not skip_read and ref_del_length > del_length:
                     # In case the reference has more deletions than the read, we need to adjust the read
                     fa_seq = reference[read.reference_name][
                              max(read.reference_start - sc_length, 0): read.reference_start + len(
@@ -366,6 +352,9 @@ def realign_homopolymeres(cram_path, output_path, reference_path, homopolymer_le
                 else:
                     adjusted_cigar = adjust_and_merge_cigar(read.cigarstring)
                     if adjusted_cigar != read.cigarstring:
+                        print(read.query_name)
+                        print(read.cigarstring)
+                        print("###")
                         read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
                     output.write(read)
 
@@ -536,11 +525,11 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
     return updated_cigar, start_pos
 
 
-parser = argparse.ArgumentParser(description='Find and realign homopolymeres in reads.')
+parser = argparse.ArgumentParser(description='Find and realign homopolymers in reads.')
 parser.add_argument('--input', required=True, help='The input CRAM file')
 parser.add_argument('--output', required=True, help='The output CRAM file')
 parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
-parser.add_argument('--homopolymer_length', type=int, default=10, help='The length of homopolymeres to search for')
+parser.add_argument('--homopolymer_length', type=int, default=10, help='The length of homopolymers to search for')
 parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
 args = parser.parse_args()
 
@@ -555,7 +544,7 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
     ]
 
     Parallel(n_jobs=args.n_jobs, max_nbytes=None)(
-        delayed(realign_homopolymeres)(
+        delayed(realign_homopolymers)(
             args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig
         )
         for contig in contigs
@@ -565,11 +554,24 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
         pysam.sort("-o", f"{args.output}{contig}_sorted.bam", f"{args.output}{contig}.bam")
         pysam.index(f"{args.output}{contig}_sorted.bam")
 
-    # merge the contig file together
+    # add the reads of the small contigs to the output file
+    small_contigs = [
+        contigs[i] for i in range(len(contigs)) if contig_lengths[i] <= MIN_CONTIG_LENGTH
+    ]
+
+
+
+    # merge the contig files together
     with pysam.AlignmentFile(args.output, mode='wb', header=cram_file.header) as output:
         for contig in contigs:
             with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
                 for read in contig_file:
+                    output.write(read)
+
+        # add the reads of the small contigs to the output file
+        with pysam.AlignmentFile(args.input) as cram:
+            for small_contig in small_contigs:
+                for read in cram.fetch(small_contig):
                     output.write(read)
 
     # remove the contig files
