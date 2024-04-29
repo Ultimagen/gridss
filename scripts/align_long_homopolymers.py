@@ -303,15 +303,15 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                     edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
                                                                                                        homopolymer_length)
 
-                if not skip_read and ref_del_length > del_length:
-                    # In case the reference has more deletions than the read, we need to adjust the read
-                    fa_seq = reference[read.reference_name][
-                             max(read.reference_start - sc_length, 0): read.reference_start + len(
-                                 sequence) - sc_length + ref_del_length - del_length].seq.upper()
-                    edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
-                                                                                                       homopolymer_length)
+                    if ref_del_length > del_length:
+                        # In case the reference has more deletions than the read, we need to adjust the read
+                        fa_seq = reference[read.reference_name][
+                                 max(read.reference_start - sc_length, 0): read.reference_start + len(
+                                     sequence) - sc_length + ref_del_length - del_length].seq.upper()
+                        edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
+                                                                                                           homopolymer_length)
 
-                if len(start_end_del_tuples) > 0 or len(ref_start_end_del_tuples) > 0:
+                if not skip_read and (len(start_end_del_tuples) > 0 or len(ref_start_end_del_tuples) > 0):
                     # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
                     count_homopolymere += 1
                     read, cigar, start_pos, r_start, choice, start_end_del_tuples = align_and_choose(read, sequence,
