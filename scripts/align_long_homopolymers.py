@@ -352,9 +352,6 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                 else:
                     adjusted_cigar = adjust_and_merge_cigar(read.cigarstring)
                     if adjusted_cigar != read.cigarstring:
-                        print(read.query_name)
-                        print(read.cigarstring)
-                        print("###")
                         read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
                     output.write(read)
 
@@ -539,7 +536,7 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
     contigs = cram_file.references
     # Get the list of contig lengths
     contig_lengths = cram_file.lengths
-    contigs = [
+    large_contigs = [
         contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
     ]
 
@@ -547,35 +544,27 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
         delayed(realign_homopolymers)(
             args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig
         )
-        for contig in contigs
+        for contig in large_contigs
     )
     # sort and index the contig files
-    for contig in contigs:
+    for contig in large_contigs:
         pysam.sort("-o", f"{args.output}{contig}_sorted.bam", f"{args.output}{contig}.bam")
         pysam.index(f"{args.output}{contig}_sorted.bam")
 
-    # add the reads of the small contigs to the output file
-    small_contigs = [
-        contigs[i] for i in range(len(contigs)) if contig_lengths[i] <= MIN_CONTIG_LENGTH
-    ]
-
-
-
     # merge the contig files together
     with pysam.AlignmentFile(args.output, mode='wb', header=cram_file.header) as output:
-        for contig in contigs:
-            with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
-                for read in contig_file:
-                    output.write(read)
-
-        # add the reads of the small contigs to the output file
         with pysam.AlignmentFile(args.input) as cram:
-            for small_contig in small_contigs:
-                for read in cram.fetch(small_contig):
-                    output.write(read)
+            for contig in contigs:
+                if contig in large_contigs:
+                    with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
+                        for read in contig_file:
+                            output.write(read)
+            else:
+                for read in cram.fetch(contig):
+                        output.write(read)
 
     # remove the contig files
-    for contig in contigs:
+    for contig in large_contigs:
         os.remove(f"{args.output}{contig}.bam")
         os.remove(f"{args.output}{contig}_sorted.bam")
         os.remove(f"{args.output}{contig}_sorted.bam.bai")
