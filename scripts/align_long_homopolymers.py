@@ -559,9 +559,9 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
                     with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
                         for read in contig_file:
                             output.write(read)
-            else:
-                for read in cram.fetch(contig):
-                        output.write(read)
+                else:
+                    for read in cram.fetch(contig):
+                            output.write(read)
 
     # remove the contig files
     for contig in large_contigs:
