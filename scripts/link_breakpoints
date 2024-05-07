@@ -358,10 +358,6 @@ if (!is.na(argv$fulloutput)) {
   mateids = rep(NA, length(vcf_ids))
   chr_pos = rep(NA, length(vcf_ids))
 
-  # Order chromosomes X, Y, and M correctly if they exist
-  chr_order <- c(as.character(1:22), "X", "Y", "M")
-  names(chr_order) <- chr_order
-
   for (link in unique(vcf_linked_by)) {
     # Find the indices in vcf_linked_by that have this linkage value
     indices <- which(vcf_linked_by == link)
