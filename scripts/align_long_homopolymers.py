@@ -256,7 +256,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
     Find and realign homopolymers in reads in a CRAM file
     @param cram_path: The input CRAM file
     @param output_path: The output CRAM file
-    @param reference_path: The reference genome FASTA file
+    @param reference_path: The reference genome FASTA file path
     @param homopolymer_length: The length of homopolymers to search for
     @param contig: The contig to process
     """
@@ -355,12 +355,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                         read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
                     output.write(read)
 
-    logger.info(f"Total reads: {count}")
-    logger.info(f"Total homopolymer reads: {count_homopolymere}")
-    logger.info(f"Total reads where original sequence is better: {count_orig_glob}")
-    logger.info(f"Total reads where original sequence is better (local): {count_orig_local}")
-    logger.info(f"Total reads where reverse complement sequence is better: {count_rev_glob}")
-    logger.info(f"Total reads where reverse complement sequence is better (local): {count_rev_local}")
+    reference.close()
 
 
 def convert_alignment_to_cigar(aligned, seq2_len):
@@ -540,7 +535,7 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
         contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
     ]
 
-    Parallel(n_jobs=args.n_jobs, max_nbytes=None)(
+    Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
         delayed(realign_homopolymers)(
             args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig
         )
