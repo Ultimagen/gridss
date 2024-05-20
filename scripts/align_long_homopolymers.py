@@ -276,7 +276,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
 
     # collect some statistics
     count = 0
-    count_homopolymere = 0
+    count_homopolymer = 0
     choices = [0, 0, 0, 0]
 
     with pysam.AlignmentFile(cram_path) as cram:
@@ -312,7 +312,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
 
                 if not skip_read and (len(start_end_del_tuples) > 0 or len(ref_start_end_del_tuples) > 0):
                     # we found long homopolymer and want to run alignment on that with homopolymere of the length of homopolymer_length
-                    count_homopolymere += 1
+                    count_homopolymer += 1
                     read, cigar, start_pos, r_start, choice, start_end_del_tuples = align_and_choose(read, sequence,
                                                                                                      global_aligner,
                                                                                                      local_aligner,
@@ -361,7 +361,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                     output.write(read)
 
     reference.close()
-    return count, count_homopolymere, choices
+    return count, count_homopolymer, choices
 
 
 
@@ -549,11 +549,11 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
         for contig in large_contigs
     )
     total_count = 0
-    total_count_homopolymere = 0
+    total_count_homopolymer = 0
     total_choices = [0, 0, 0, 0]
-    for count, count_homopolymere, choices in results:
+    for count, count_homopolymer, choices in results:
         total_count += count
-        total_count_homopolymere += count_homopolymere
+        total_count_homopolymer += count_homopolymer
         total_choices = [total_choices[i] + choices[i] for i in range(4)]
 
     # sort and index the contig files
@@ -584,7 +584,7 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
     pysam.index(args.output)
 
     logger.info(f"Total reads: {total_count}")
-    logger.info(f"Reads with homopolymers: {total_count_homopolymere}")
+    logger.info(f"Reads with homopolymers: {total_count_homopolymer}")
     logger.info(f"Reads where original sequence is better: {total_choices[0]}")
     logger.info(f"Reads where original sequence is better (local): {total_choices[1]}")
     logger.info(f"Reads where reverse complement sequence is better: {total_choices[2]}")
