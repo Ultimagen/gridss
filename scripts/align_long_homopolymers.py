@@ -264,8 +264,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
     @param contig: The contig to process
     """
     # Open the CRAM file
-    with fai_lock:
-        reference = pyfaidx.Fasta(reference_path)
+    reference = pyfaidx.Fasta(reference_path)
 
 
     match = 1
@@ -299,17 +298,19 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                     if read.cigartuples[0][0] == 4:
                         # the read is soft clipped
                         sc_length = read.cigartuples[0][1]
-                    fa_seq = reference[read.reference_name][
-                             max(read.reference_start - sc_length, 0): read.reference_start + len(
-                                 sequence) - sc_length].seq.upper()
+                    with fai_lock:
+                        fa_seq = reference[read.reference_name][
+                                 max(read.reference_start - sc_length, 0): read.reference_start + len(
+                                     sequence) - sc_length].seq.upper()
                     edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
                                                                                                        homopolymer_length)
 
                     if ref_del_length > del_length:
                         # In case the reference has more deletions than the read, we need to adjust the read
-                        fa_seq = reference[read.reference_name][
-                                 max(read.reference_start - sc_length, 0): read.reference_start + len(
-                                     sequence) - sc_length + ref_del_length - del_length].seq.upper()
+                        with fai_lock:
+                            fa_seq = reference[read.reference_name][
+                                     max(read.reference_start - sc_length, 0): read.reference_start + len(
+                                         sequence) - sc_length + ref_del_length - del_length].seq.upper()
                         edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
                                                                                                            homopolymer_length)
 
