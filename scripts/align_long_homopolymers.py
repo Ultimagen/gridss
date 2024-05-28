@@ -11,7 +11,6 @@ from joblib import Parallel, delayed
 import os
 import logging
 from Bio.Seq import Seq
-from threading import Lock
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__ if __name__ != "__main__" else "align_long_homopolymers")
@@ -535,8 +534,6 @@ parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, 
 args = parser.parse_args()
 
 MIN_CONTIG_LENGTH = 100000
-
-fai_lock = Lock()
 
 with pysam.AlignmentFile(args.input, "rc") as cram_file:
     # Get the list of contig names
