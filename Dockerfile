@@ -190,6 +190,7 @@ COPY scripts/gridss \
 	scripts/link_breakpoints.R \
 	scripts/revert_sup_low_mapq_ua_alignment.py \
 	scripts/align_long_homopolymers.py \
+	scripts/convert_vcf_format.R \
 	/opt/gridss/
 RUN chmod +x /opt/gridss/* && \
 	chmod -x /opt/gridss/*.R
