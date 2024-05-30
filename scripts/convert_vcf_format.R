@@ -1,13 +1,12 @@
 library(StructuralVariantAnnotation, quietly=TRUE)
 library(VariantAnnotation, quietly=TRUE)
 library(GenomicRanges, quietly=TRUE)
-library(BSgenome.Hsapiens.UCSC.hg38, quietly=TRUE)
 library(parallel, quietly = TRUE)
 library(pbapply, quietly = TRUE)
 library(stringr, quietly=TRUE)
-
 library(argparser, quietly=TRUE)
 
+options(scipen = 999)
 # Create a parser object
 parser <- ArgumentParser(description = 'Convert VCF format')
 argp = arg_parser("convert vcf format")
@@ -18,6 +17,13 @@ argp = add_argument(argp, "--n_jobs", type="integer", default=-1, help="Number o
 argv = parse_args(argp)
 
 
+# argv <- list(
+#   input = "/Users/mayalevy/Downloads/gridss/NA24385_linked.vcf.bgz",
+#   output = "/Users/mayalevy/Downloads/gridss/modified_vcf.vcf.gz",
+#   ref = "BSgenome.Hsapiens.UCSC.hg38",
+#   n_jobs = -1
+# )
+
 # Define the path to your VCF file
 # gs://cromwell-backend-ultima-data-307918/cromwell-execution/SVPipeline/9aaff528-f4e7-439e-b5b5-47ee747e2515/call-GermlineLinkVariants/NA24385_linked.vcf.bgz
 # vcf_file <-"/Users/mayalevy/Downloads/gridss/NA24385_linked.vcf.bgz"
@@ -25,8 +31,21 @@ argv = parse_args(argp)
 #vcf_file <- "/Users/mayalevy/Downloads/gridss/diploidSV.vcf.gz"
 # gsutil cp modified_vcf_wgs.vcf.bgz gs://ultimagen-users-data/maya/deepvariant/gridss/
 
+
+refgenome = NULL
+if (!is.null(argv$ref) & !is.na(argv$ref) & argv$ref != "") {
+  if (!(argv$ref %in% installed.packages()[,1])) {
+    stop(paste("Missing reference genome package", argv$ref, "."))
+  } else {
+    refgenome=eval(parse(text=paste0("library(", argv$ref, ")\n", argv$ref)))
+  }
+} else {
+  msg = paste("No reference genome supplied using --ref. Not performing variant equivalence checks.")
+  write(msg, stderr())
+}
+
 # Read the VCF file
-vcf <- readVcf(argv$input, "")
+vcf <- readVcf(argv$input_vcf, "")
 
 # Remove all SVTYPE values from the INFO field
 info(vcf)$SVTYPE <- NULL
@@ -128,7 +147,7 @@ short_del_starts <- start(vcf)[short_del_indices]
 short_del_ends <- short_del_starts + short_del_lengths - 1
 
 # Fetch sequences for short DEL variants in one call
-short_del_seqs <- getSeq(BSgenome.Hsapiens.UCSC.hg38, names = seqnames(vcf)[short_del_indices], start = short_del_starts, end = short_del_ends)
+short_del_seqs <- getSeq(refgenome, names = seqnames(vcf)[short_del_indices], start = short_del_starts, end = short_del_ends)
 
 # Collect indices for INS variants
 ins_indices <- which(!is.na(info(vcf)$SVTYPE) & info(vcf)$SVTYPE == "INS")
@@ -154,8 +173,8 @@ process_variant <- function(i, vcf, short_del_indices, short_del_seqs, short_del
     result$end <- start(vcf)[i] + length(result$ref) - 1
   } else if (i %in% ins_indices) {
     # Update the REF and ALT fields for INS variants
-    mateid_field <- info(vcf)$MATEID[i]
-    if (!is.null(mateid_field) && length(mateid_field) > 0 && !is.na(mateid_field[[1]])) {
+    alt_field = as.character(alt(vcf)[i])
+    if (grepl('NNNNNNNNNN', alt_field)) {
       result$alt <- CharacterList("<INS>")
     } else {
       result$alt <- gsub("\\]chrX:[0-9]+\\]", "", as.character(alt(vcf)[i]))
@@ -170,8 +189,9 @@ process_variant <- function(i, vcf, short_del_indices, short_del_seqs, short_del
       result$svtype <- "BND"
       alt_length <- nchar(alt_field)
       result$svlen <- alt_length
-      result$end <- start(vcf)[i] + alt_length
+      result$end <- start(vcf)[i]
     }
+    
   }
   
   return(result)
@@ -192,11 +212,11 @@ results <- pblapply(seq_along(vcf), process_variant, vcf = vcf, short_del_indice
 # Assuming results from pblapply are ready
 
 # Initialize the necessary fields
-alt_updates <- vector("list", length(vcf))
-ref_updates <- vector("list", length(vcf))
-end_updates <- rep(NA, length(vcf))
-svtype_updates <- rep(NA_character_, length(vcf))
-svlen_updates <- rep(NA, length(vcf))
+alt_updates <- as.list(alt(vcf))
+ref_updates <- as.list(ref(vcf))
+end_updates <- info(vcf)$END
+svtype_updates <- info(vcf)$SVTYPE
+svlen_updates <- info(vcf)$SVLEN
 
 # Extract updates from results
 for (i in seq_along(results)) {
@@ -217,14 +237,22 @@ for (i in seq_along(results)) {
   }
 }
 
-
 ref_updates <- lapply(ref_updates, function(x) {
-  if (is.null(x) || length(x) == 0 || is.na(x)) {
+  if (is.null(x)) {
+    return(DNAString(""))
+  } else if (is(x, "DNAString") && length(x) == 0) {
+    return(DNAString(""))
+  } else if (is(x, "DNAStringSet")) {
+    return(as(x[1], "DNAString"))
+  } else if (is.character(x)) {
+    return(DNAString(x))
+  } else if (is.vector(x) && all(is.na(x))) {
     return(DNAString(""))
   } else {
-    return(as(x, "DNAString"))
+    return(x)
   }
 })
+
 
 # Apply updates to the VCF object
 alt(vcf) <- as(alt_updates, "CharacterList")
@@ -232,88 +260,14 @@ ref(vcf) <- DNAStringSet(unlist(ref_updates))
 info(vcf)$END <- end_updates
 info(vcf)$SVTYPE <- svtype_updates
 info(vcf)$SVLEN <- svlen_updates
-# for (i in seq_along(vcf)) {
-#   if (!is.null(results[[i]]$alt)) {
-#     alt(vcf)[i] <- results[[i]]$alt
-#   }
-#   if (!is.null(results[[i]]$ref)) {
-#     ref(vcf)[i] <- results[[i]]$ref
-#   }
-#   if (!is.null(results[[i]]$end)) {
-#     info(vcf)$END[i] <- results[[i]]$end
-#   }
-#   if (!is.null(results[[i]]$svtype)) {
-#     info(vcf)$SVTYPE[i] <- results[[i]]$svtype
-#   }
-#   if (!is.null(results[[i]]$svlen)) {
-#     info(vcf)$SVLEN[i] <- results[[i]]$svlen
-#   }
-# }
-
-
-
-
-
-### Modify ALT and REF fields for deletions
-# for (i in seq_along(vcf)) {
-#   if (!is.null(info(vcf)$SVTYPE[i]) && !is.na(info(vcf)$SVTYPE[i]) && info(vcf)$SVTYPE[i] == "DEL") {
-# 
-#       # Calculate the sequence length of the deletion
-#       deletion_length <- abs(info(vcf)$SVLEN[i])
-# 
-# 
-#       # Update the REF field
-#       if (deletion_length <= 329) {
-#         # If the deletion length is not larger than 329 bases, use the full sequence
-#         full_ref_seq <- getSeq(BSgenome.Hsapiens.UCSC.hg38,
-#                                names = seqnames(vcf)[i],
-#                                start = start(vcf)[i],
-#                                end = start(vcf)[i] + deletion_length - 1)
-#         alt(vcf)[i] <- ref(vcf)[i]
-#         ref(vcf)[i] <- DNAStringSet(full_ref_seq)
-#       } else {
-#         alt(vcf)[i] <- CharacterList("<DEL>")
-#       }
-#       info(vcf)$END[i] = start(vcf)[i] + length(ref(vcf)[i]) -1
-#   } else if (!is.null(info(vcf)$SVTYPE[i]) && !is.na(info(vcf)$SVTYPE[i]) && info(vcf)$SVTYPE[i] == "INS") {
-#     ### Modify ALT and REF fields for insertions
-#     # Set ALT to REF seq
-#     mateid_field = info(vcf)$MATEID[i]
-#     if(!is.null(mateid_field) && length(mateid_field[[1]]) != 0) {
-#       alt(vcf)[i] <- CharacterList("<INS>")
-#     } else {
-#       alt(vcf)[i] <- gsub("\\]chrX:[0-9]+\\]", "", alt(vcf)[i])
-#     }
-#     
-#     
-#     info(vcf)$END[i] = start(vcf)[i] + length(ref(vcf)[i]) -1
-#   } else if(is.null(info(vcf)$SVTYPE[i])){
-#     alt_field <- as.character(alt(vcf)[i])
-#     mateid_field = info(vcf)$MATEID[i]
-#     if(!is.null(mateid_field) && length(mateid_field[[1]]) != 0 && (grepl(".*\\[.*\\].*", alt_field) || grepl(".*\\].*\\[.*", alt_field))) {
-#       ### Handle breakends BND
-#       info(vcf)$SVTYPE[i] = "BND"
-#       # Get the length of the string
-#       alt_length = nchar(alt_field)
-#       info(vcf)$SVLEN[i] = alt_length
-#       info(vcf)$END[i] = start(vcf)[i] + alt_length
-#     }
-#   }
-# }
-
-
-
-
-# Define the path to save the modified VCF file as compressed VCF
-#modified_vcf_file <- "/Users/mayalevy/Downloads/gridss/modified_vcf.vcf.gz"
 
 # Write the modified VCF file as compressed VCF
-writeVcf(vcf, filename = argv$output, index = TRUE)
+writeVcf(vcf, filename = argv$output_vcf, index = TRUE)
 
 
 parser = argparse.ArgumentParser(description='Convert vcf format.')
-parser.add_argument('--input', required=True, help='The input vcf file')
-parser.add_argument('--output', required=True, help='The output vcf file')
+parser.add_argument('--input_vcf', required=True, help='The input vcf file')
+parser.add_argument('--output_vcf', required=True, help='The output vcf file')
 parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
 parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
 args = parser.parse_args()
