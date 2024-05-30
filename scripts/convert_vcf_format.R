@@ -8,14 +8,12 @@ library(argparser, quietly=TRUE)
 
 options(scipen = 999)
 # Create a parser object
-parser <- ArgumentParser(description = 'Convert VCF format')
-argp = arg_parser("convert vcf format")
-argp = add_argument(argp, "--ref", default="", help="Reference genome to use. Must be a valid installed BSgenome package")
-argp = add_argument(argp, "--input", help="GRIDSS VCF")
-argp = add_argument(argp, "--output", help="Output VCF")
+argp = arg_parser("convert VCF format")
+argp = add_argument(argp, "--reference", default="", help="Reference genome to use. Must be a valid installed BSgenome package")
+argp = add_argument(argp, "--input_vcf", help="The input vcf file")
+argp = add_argument(argp, "--output_vcf", help="The output vcf file")
 argp = add_argument(argp, "--n_jobs", type="integer", default=-1, help="Number of parallel jobs")
 argv = parse_args(argp)
-
 
 # argv <- list(
 #   input = "/Users/mayalevy/Downloads/gridss/NA24385_linked.vcf.bgz",
@@ -263,11 +261,3 @@ info(vcf)$SVLEN <- svlen_updates
 
 # Write the modified VCF file as compressed VCF
 writeVcf(vcf, filename = argv$output_vcf, index = TRUE)
-
-
-parser = argparse.ArgumentParser(description='Convert vcf format.')
-parser.add_argument('--input_vcf', required=True, help='The input vcf file')
-parser.add_argument('--output_vcf', required=True, help='The output vcf file')
-parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
-parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
-args = parser.parse_args()
