@@ -16,8 +16,8 @@ argp = add_argument(argp, "--n_jobs", type="integer", default=-1, help="Number o
 argv = parse_args(argp)
 
 # argv <- list(
-#   input = "/Users/mayalevy/Downloads/gridss/NA24385_linked.vcf.bgz",
-#   output = "/Users/mayalevy/Downloads/gridss/modified_vcf.vcf.gz",
+#   input_vcf = "/Users/mayalevy/Downloads/gridss/NA24385_linked.vcf.bgz",
+#   output_vcf = "/Users/mayalevy/Downloads/gridss/modified_vcf.vcf.gz",
 #   ref = "BSgenome.Hsapiens.UCSC.hg38",
 #   n_jobs = -1
 # )
@@ -71,7 +71,7 @@ end_positions[!is.na(matching_indices)] <- start(vcf)[!is.na(matching_indices)] 
 end_header <- DataFrame(
   Number = "1",
   Type = "Integer",
-  Description = "End position of the variant",
+  Description = "End position of the variant described in this record",
   row.names = "END"
 )
 
@@ -79,8 +79,22 @@ end_header <- DataFrame(
 svlen_header <- DataFrame(
   Number = "1",
   Type = "Integer",
-  Description = "Length of variant",
+  Description = "Difference in length between REF and ALT alleles",
   row.names = "SVLEN"
+)
+
+left_svinsseq_header <- DataFrame(
+  Number = ".",
+  Type = "String",
+  Description = "Known left side of insertion for an insertion of unknown length",
+  row.names = "LEFT_SVINSSEQ"
+)
+
+right_svinsseq_header <- DataFrame(
+  Number = ".",
+  Type = "String",
+  Description = "Known rigth side of insertion for an insertion of unknown length",
+  row.names = "RIGHT_SVINSSEQ"
 )
 
 # Add the new header line to the VCF header
@@ -174,12 +188,18 @@ process_variant <- function(i, vcf, short_del_indices, short_del_seqs, short_del
     alt_field = as.character(alt(vcf)[i])
     if (grepl('NNNNNNNNNN', alt_field)) {
       result$alt <- CharacterList("<INS>")
+      # Extract the part before 'NNNNNNNNNN'
+      result$left_svinsseq <- sub('NNNNNNNNNN.*', '', alt_field)
+      # Extract the part after 'NNNNNNNNNN'
+      result$right_svinsseq <- sub('.*NNNNNNNNNN', '', alt_field)
     } else {
-      result$alt <- gsub("\\]chrX:[0-9]+\\]", "", as.character(alt(vcf)[i]))
+      result$alt <- gsub("\\[chr[0-9XY]+:[0-9]+\\[|\\]chr[0-9XY]+:[0-9]+\\]", "", alt_field)
     }
     result$ref <- DNAString(as.character(ref(vcf)[i]))
     result$end <- start(vcf)[i] + length(result$ref) - 1
   } else if (is.null(info(vcf)$SVTYPE[i])) {
+    print(i)
+    stop(paste("I think should not reach here. this code should be deleted", i, "."))
     alt_field <- as.character(alt(vcf)[i])
     mateid_field <- info(vcf)$MATEID[i]
     if (!is.null(mateid_field) && length(mateid_field[[1]]) != 0 && (grepl(".*\\[.*\\].*", alt_field) || grepl(".*\\].*\\[.*", alt_field))) {
@@ -215,6 +235,8 @@ ref_updates <- as.list(ref(vcf))
 end_updates <- info(vcf)$END
 svtype_updates <- info(vcf)$SVTYPE
 svlen_updates <- info(vcf)$SVLEN
+left_svinsseq_updates <- rep(NA, length(vcf))
+right_svinsseq_updates <- rep(NA, length(vcf))
 
 # Extract updates from results
 for (i in seq_along(results)) {
@@ -233,6 +255,13 @@ for (i in seq_along(results)) {
   if (!is.null(results[[i]]$svlen)) {
     svlen_updates[i] <- results[[i]]$svlen
   }
+  if (!is.null(results[[i]]$left_svinsseq)) {
+    left_svinsseq_updates[i] <- results[[i]]$left_svinsseq
+  }
+  if (!is.null(results[[i]]$right_svinsseq)) {
+    right_svinsseq_updates[i] <- results[[i]]$right_svinsseq
+  }
+
 }
 
 ref_updates <- lapply(ref_updates, function(x) {
@@ -258,6 +287,11 @@ ref(vcf) <- DNAStringSet(unlist(ref_updates))
 info(vcf)$END <- end_updates
 info(vcf)$SVTYPE <- svtype_updates
 info(vcf)$SVLEN <- svlen_updates
+info(vcf)$LEFT_SVINSSEQ <- left_svinsseq_updates
+info(vcf)$RIGHT_SVINSSEQ <- right_svinsseq_updates
+
+# remove variants without SVTYPE
+vcf = vcf[!is.na(info(vcf)$SVTYPE)]
 
 # Write the modified VCF file as compressed VCF
 writeVcf(vcf, filename = argv$output_vcf, index = TRUE)
