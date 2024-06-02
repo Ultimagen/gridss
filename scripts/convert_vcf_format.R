@@ -101,6 +101,8 @@ right_svinsseq_header <- DataFrame(
 vcf_header <- header(vcf)
 info(vcf_header) <- rbind(info(vcf_header), end_header)
 info(vcf_header) <- rbind(info(vcf_header), svlen_header)
+info(vcf_header) <- rbind(info(vcf_header), left_svinsseq_header)
+info(vcf_header) <- rbind(info(vcf_header), right_svinsseq_header)
 header(vcf) <- vcf_header
 
 # Add the simpleEvent info to the original VCF object
