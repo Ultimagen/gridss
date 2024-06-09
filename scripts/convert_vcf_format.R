@@ -8,13 +8,21 @@ library(argparser, quietly=TRUE)
 
 options(scipen = 999)
 # Create a parser object
-argp = arg_parser("convert VCF format")
-argp = add_argument(argp, "--reference", default="", help="Reference genome to use. Must be a valid installed BSgenome package")
-argp = add_argument(argp, "--input_vcf", help="The input vcf file")
-argp = add_argument(argp, "--output_vcf", help="The output vcf file")
-argp = add_argument(argp, "--n_jobs", type="integer", default=-1, help="Number of parallel jobs")
-argv = parse_args(argp)
-
+if(!interactive()){
+  argp = arg_parser("convert VCF format")
+  argp = add_argument(argp, "--reference", default="", help="Reference genome to use. Must be a valid installed BSgenome package")
+  argp = add_argument(argp, "--input_vcf", help="The input vcf file")
+  argp = add_argument(argp, "--output_vcf", help="The output vcf file")
+  argp = add_argument(argp, "--n_jobs", type="integer", default=-1, help="Number of parallel jobs")
+  argp = add_argument(argp, "--interval", type="string", default=NULL, help="Interval to read")
+  argv = parse_args(argp)
+} else {
+  argv <- list(reference=reference,
+               input_vcf = input_vcf, 
+               output_vcf = output_vcf, 
+               n_jobs = 1, 
+               interval = interval)
+}
 # argv <- list(
 #   input_vcf = "/Users/mayalevy/Downloads/gridss/NA24385_linked.vcf.bgz",
 #   output_vcf = "/Users/mayalevy/Downloads/gridss/modified_vcf.vcf.gz",
@@ -42,8 +50,18 @@ if (!is.null(argv$ref) & !is.na(argv$ref) & argv$ref != "") {
   write(msg, stderr())
 }
 
+if (!is.null(argv$interval)) {
+  matches <- regmatches(argv$interval, regexec("^(chr[^:]+):(\\d+)-(\\d+)$", argv$interval))
+  chromosome <- matches[[1]][2]
+  start_pos <- as.numeric(matches[[1]][3])
+  end_pos <- as.numeric(matches[[1]][4])
+  gi = GRanges(chromosome, IRanges(start_pos, end_pos))
+} else {
+  gi = NULL
+}
+
 # Read the VCF file
-vcf <- readVcf(argv$input_vcf, "")
+vcf <- readVcf(argv$input_vcf,  param=gi)
 
 # Remove all SVTYPE values from the INFO field
 info(vcf)$SVTYPE <- NULL
@@ -161,7 +179,11 @@ short_del_starts <- start(vcf)[short_del_indices]
 short_del_ends <- short_del_starts + short_del_lengths - 1
 
 # Fetch sequences for short DEL variants in one call
-short_del_seqs <- getSeq(refgenome, names = seqnames(vcf)[short_del_indices], start = short_del_starts, end = short_del_ends)
+if (length(short_del_indices) > 0){
+  short_del_seqs <- getSeq(refgenome, names = seqnames(vcf)[short_del_indices], start = short_del_starts, end = short_del_ends)
+} else {
+  short_del_seqs <- NULL
+}
 
 # Collect indices for INS variants
 ins_indices <- which(!is.na(info(vcf)$SVTYPE) & info(vcf)$SVTYPE == "INS")
@@ -193,7 +215,7 @@ process_variant <- function(i, vcf, short_del_indices, short_del_seqs, short_del
       # Extract the part before 'NNNNNNNNNN'
       result$left_svinsseq <- sub('NNNNNNNNNN.*', '', alt_field)
       # Extract the part after 'NNNNNNNNNN'
-      result$right_svinsseq <- sub('.*NNNNNNNNNN', '', alt_field)
+      result$right_svinsseq <- sub('\\..*','',sub('.*NNNNNNNNNN', '', alt_field))
     } else {
       result$alt <- gsub("\\[chr[0-9XY]+:[0-9]+\\[|\\]chr[0-9XY]+:[0-9]+\\]", "", alt_field)
     }
@@ -239,6 +261,7 @@ svtype_updates <- info(vcf)$SVTYPE
 svlen_updates <- info(vcf)$SVLEN
 left_svinsseq_updates <- rep(NA, length(vcf))
 right_svinsseq_updates <- rep(NA, length(vcf))
+gt_updates <- geno(vcf)$GT
 
 # Extract updates from results
 for (i in seq_along(results)) {
@@ -263,7 +286,6 @@ for (i in seq_along(results)) {
   if (!is.null(results[[i]]$right_svinsseq)) {
     right_svinsseq_updates[i] <- results[[i]]$right_svinsseq
   }
-
 }
 
 ref_updates <- lapply(ref_updates, function(x) {
@@ -292,6 +314,10 @@ info(vcf)$SVLEN <- svlen_updates
 info(vcf)$LEFT_SVINSSEQ <- left_svinsseq_updates
 info(vcf)$RIGHT_SVINSSEQ <- right_svinsseq_updates
 
+af = geno(vcf)$AF
+approx_genotype <- ifelse(af < 0.1, "0/0",
+                          ifelse(af < 0.6, "0/1", "1/1"))
+geno(vcf)$GT <- approx_genotype
 # remove variants without SVTYPE
 vcf = vcf[!is.na(info(vcf)$SVTYPE)]
 
