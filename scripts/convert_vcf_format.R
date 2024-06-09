@@ -117,6 +117,7 @@ right_svinsseq_header <- DataFrame(
 
 # Add the new header line to the VCF header
 vcf_header <- header(vcf)
+
 info(vcf_header) <- rbind(info(vcf_header), end_header)
 info(vcf_header) <- rbind(info(vcf_header), svlen_header)
 info(vcf_header) <- rbind(info(vcf_header), left_svinsseq_header)
@@ -206,7 +207,7 @@ process_variant <- function(i, vcf, short_del_indices, short_del_seqs, short_del
     # Handle long DEL variants
     result$alt <- CharacterList("<DEL>")
     result$ref <- DNAString(as.character(ref(vcf)[i]))
-    result$end <- start(vcf)[i] + length(result$ref) - 1
+    result$end <- start(vcf)[i] - info(vcf)$SVLEN[i] - 1
   } else if (i %in% ins_indices) {
     # Update the REF and ALT fields for INS variants
     alt_field = as.character(alt(vcf)[i])
@@ -261,7 +262,6 @@ svtype_updates <- info(vcf)$SVTYPE
 svlen_updates <- info(vcf)$SVLEN
 left_svinsseq_updates <- rep(NA, length(vcf))
 right_svinsseq_updates <- rep(NA, length(vcf))
-gt_updates <- geno(vcf)$GT
 
 # Extract updates from results
 for (i in seq_along(results)) {
