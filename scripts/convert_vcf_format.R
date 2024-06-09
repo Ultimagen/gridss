@@ -129,7 +129,7 @@ info(vcf)$END <- end_positions
 info(vcf)$SVLEN <- svlens
 
 # remove variants with svLen smaller than 30
-vcf = vcf[which(is.na(svlens) | abs(svlens) >= 50)]
+vcf = vcf[which(is.na(svlens) | abs(svlens) >= 30)]
 
 ### Remove MATE variant - keep only one variant  only in case of DEL or INS
 
@@ -314,9 +314,10 @@ info(vcf)$SVLEN <- svlen_updates
 info(vcf)$LEFT_SVINSSEQ <- left_svinsseq_updates
 info(vcf)$RIGHT_SVINSSEQ <- right_svinsseq_updates
 
+## calculating (as suggested in multiple locations the approximate genotypes)
 af = geno(vcf)$AF
 approx_genotype <- ifelse(af < 0.1, "0/0",
-                          ifelse(af < 0.6, "0/1", "1/1"))
+                          ifelse(af < 0.8, "0/1", "1/1"))
 geno(vcf)$GT <- approx_genotype
 # remove variants without SVTYPE
 vcf = vcf[!is.na(info(vcf)$SVTYPE)]
