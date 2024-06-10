@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Git Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - uses: benjlevesque/short-sha@v2.2
         id: short-sha
