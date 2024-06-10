@@ -77,9 +77,9 @@ jobs:
       
       - name: Download resources
         run: |
-          gsutil cp gs://concordanz/scripts/RepeatMasker-4.1.2-p1.tar.gz .
-          gsutil cp gs://concordanz/scripts/rmblast-2.14.1+-x64-linux.tar.gz .
-          
+          gsutil cp gs://concordance-data/scripts/RepeatMasker-4.1.2-p1.tar.gz .
+          gsutil cp gs://concordance-data/scripts/rmblast-2.14.1+-x64-linux.tar.gz .
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
