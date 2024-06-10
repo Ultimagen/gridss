@@ -34,7 +34,8 @@ RUN mkdir /opt/gridss/
 ARG GRIDSS_VERSION
 COPY src/main/c /opt/gridss/src/main/c
 COPY src/test/resources /opt/gridss/src/test/resources
-RUN cd /opt/gridss/src/main/c/gridsstools/htslib && ls -l && \
+RUN ls -l /opt/gridss/src/main/c/gridsstools/ && ls -l /opt/gridss/src/main/c/gridsstools/htslib/
+RUN cd /opt/gridss/src/main/c/gridsstools/htslib && \
 	autoreconf -i && ./configure && make -j 8 && \
 	cd .. && \
 	autoreconf -i && ./configure && make -j 8 && \
