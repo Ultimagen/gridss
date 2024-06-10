@@ -119,13 +119,13 @@ RUN mkdir /opt/trf && \
 	chmod +x trf*.linux64 && \
 	ln -s trf*.linux64 trf
 # Turns out we need makeblastdb as well as rmblastn (https://github.com/PapenfussLab/gridss/issues/535)
-RUN mkdir /opt/rmblast && \
-	cd /opt/rmblast && \
-	wget https://www.repeatmasker.org/rmblast/rmblast-2.14.1+-x64-linux.tar.gz && \
+RUN mkdir /opt/rmblast
+COPY rmblast-2.14.1+-x64-linux.tar.gz /opt/rmblast
+RUN cd /opt/rmblast && \
 	tar --no-anchored --strip-components 2 -xvzf rmblast-2.14.1+-x64-linux.tar.gz rmblastn makeblastdb && \
 	rm rmblast-2.14.1+-x64-linux.tar.gz
+COPY RepeatMasker-4.1.2-p1.tar.gz /opt/
 RUN cd /opt/ && \
-	wget http://www.repeatmasker.org/RepeatMasker/RepeatMasker-4.1.2-p1.tar.gz && \
 	tar zxf RepeatMasker-*.tar.gz && \
 	rm RepeatMasker-*.tar.gz
 # Install GATK
