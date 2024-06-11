@@ -14,7 +14,7 @@ if(!interactive()){
   argp = add_argument(argp, "--input_vcf", help="The input vcf file")
   argp = add_argument(argp, "--output_vcf", help="The output vcf file")
   argp = add_argument(argp, "--n_jobs", type="integer", default=-1, help="Number of parallel jobs")
-  argp = add_argument(argp, "--interval", type="string", default=NULL, help="Interval to read")
+  argp = add_argument(argp, "--interval", type="character", default=NULL, help="Interval to read")
   argv = parse_args(argp)
 } else {
   argv <- list(reference=reference,
@@ -50,18 +50,19 @@ if (!is.null(argv$ref) & !is.na(argv$ref) & argv$ref != "") {
   write(msg, stderr())
 }
 
-if (!is.null(argv$interval)) {
+if (!is.na(argv$interval)) {
   matches <- regmatches(argv$interval, regexec("^(chr[^:]+):(\\d+)-(\\d+)$", argv$interval))
   chromosome <- matches[[1]][2]
   start_pos <- as.numeric(matches[[1]][3])
   end_pos <- as.numeric(matches[[1]][4])
   gi = GRanges(chromosome, IRanges(start_pos, end_pos))
+  vcf <- readVcf(argv$input_vcf,  param=gi)
+
 } else {
-  gi = NULL
+  vcf <- readVcf(argv$input_vcf,  "")
 }
 
 # Read the VCF file
-vcf <- readVcf(argv$input_vcf,  param=gi)
 
 # Remove all SVTYPE values from the INFO field
 info(vcf)$SVTYPE <- NULL
