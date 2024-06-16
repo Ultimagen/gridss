@@ -215,9 +215,17 @@ process_variant <- function(i, vcf, short_del_indices, short_del_seqs, short_del
     if (grepl('NNNNNNNNNN', alt_field)) {
       result$alt <- CharacterList("<INS>")
       # Extract the part before 'NNNNNNNNNN'
-      result$left_svinsseq <- sub('^.*\\.','',sub('NNNNNNNNNN.*', '', alt_field))
+      left_part <- sub('NNNNNNNNNN.*', '', alt_field)
+      left_part <- sub('\\.$', '', left_part)
+      left_part <- sub('^.*\\.', '', left_part)
+      left_part <- sub('^.*\\]', '', left_part)
+      result$left_svinsseq <- left_part
       # Extract the part after 'NNNNNNNNNN'
-      result$right_svinsseq <- sub('\\..*','',sub('.*NNNNNNNNNN', '', alt_field))
+      right_part <- sub('.*NNNNNNNNNN', '', alt_field)
+      right_part <- sub('^\\.', '', right_part)
+      right_part <- sub('\\..*.', '', right_part)
+      right_part <- sub('\\[.*.', '', right_part)
+      result$right_svinsseq <- right_part
     } else {
       result$alt <- gsub("\\[chr[0-9XY]+:[0-9]+\\[|\\]chr[0-9XY]+:[0-9]+\\]", "", alt_field)
     }
