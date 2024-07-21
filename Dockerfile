@@ -131,9 +131,9 @@ RUN cd /opt/ && \
 # Install GATK
 RUN mkdir /opt/gatk && \
 	cd /opt/gatk && \
-	 wget https://github.com/broadinstitute/gatk/releases/download/4.2.6.1/gatk-4.2.6.1.zip && \
-      unzip gatk-4.2.6.1.zip && \
-      rm gatk-4.2.6.1.zip
+	 wget https://github.com/broadinstitute/gatk/releases/download/4.6.0.0/gatk-4.6.0.0.zip && \
+      unzip gatk-4.6.0.0.zip && \
+      rm gatk-4.6.0.0.zip
 RUN apt update && apt --yes install default-jdk
 ### Kraken2 and dependencies
 # dustmasker from e-direct: (or is this in ncbi-blast as well?)
