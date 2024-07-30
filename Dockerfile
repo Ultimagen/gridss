@@ -129,11 +129,18 @@ RUN cd /opt/ && \
 	tar zxf RepeatMasker-*.tar.gz && \
 	rm RepeatMasker-*.tar.gz
 # Install GATK
+RUN export GATK_VERSION="4.6.0.0" && \
+    mkdir /opt/gatk && \
+    cd /opt/gatk && \
+    wget https://github.com/broadinstitute/gatk/releases/download/${GATK_VERSION}/gatk-${GATK_VERSION}.zip && \
+    unzip -d /opt/gatk gatk-${GATK_VERSION}.zip && rm gatk-${GATK_VERSION}.zip && \
+    ln -s /opt/gatk/gatk-${GATK_VERSION}/gatk /usr/local/bin/gatk
+
 RUN mkdir /opt/gatk && \
 	cd /opt/gatk && \
 	 wget https://github.com/broadinstitute/gatk/releases/download/4.6.0.0/gatk-4.6.0.0.zip && \
       unzip gatk-4.6.0.0.zip && \
-      rm gatk-4.6.0.0.zip
+      rm gatk-4.6.0.0
 RUN apt update && apt --yes install default-jdk
 ### Kraken2 and dependencies
 # dustmasker from e-direct: (or is this in ncbi-blast as well?)
