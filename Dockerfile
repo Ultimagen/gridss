@@ -71,7 +71,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 	apt-get update && apt-get install -y \
 		apt-utils \
 		gawk \
-		openjdk-11-jre-headless \
+		openjdk-17-jre-headless \
 		bwa \
 		hmmer \
 		bedtools \
