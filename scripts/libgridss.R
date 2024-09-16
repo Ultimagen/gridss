@@ -817,6 +817,10 @@ align_breakpoints <- function(vcf, align = c("centre"), is_higher_breakend = nam
   # Update REF base to reflect new positions
   if (!is.null(refgenome)) {
     chr = seqnames(rowRanges(vcf))
+    # Ensure chromosome names start with "chr"
+    chr = as.character(chr)  # Convert factor-Rle to character
+    chr = ifelse(grepl("^chr", chr), chr, paste0("chr", chr))  # Add "chr" if missing
+    
     valid_positions = as.logical(chr %in% seqnames(refgenome))
     ref_bases = getSeq(refgenome, names = chr[valid_positions], start = new_positions[valid_positions], end = new_positions[valid_positions])
     ref_bases = as.character(ref_bases)
