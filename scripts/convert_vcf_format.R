@@ -30,12 +30,6 @@ if(!interactive()){
 #   n_jobs = -1
 # )
 
-argv <- list(
-  input_vcf = "/Users/mayalevy/Downloads/gridss/031865-somatic_chr9.gripss.vcf.gz",
-  output_vcf = "/Users/mayalevy/Downloads/gridss/modified_031865-somatic_chr9.gripss.vcf.gz",
-  ref = "BSgenome.Hsapiens.UCSC.hg38",
-  n_jobs = -1
-)
 
 # Define the path to your VCF file
 # gs://cromwell-backend-ultima-data-307918/cromwell-execution/SVPipeline/9aaff528-f4e7-439e-b5b5-47ee747e2515/call-GermlineLinkVariants/NA24385_linked.vcf.bgz
