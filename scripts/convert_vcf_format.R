@@ -30,6 +30,13 @@ if(!interactive()){
 #   n_jobs = -1
 # )
 
+argv <- list(
+  input_vcf = "/Users/mayalevy/Downloads/gridss/031865-somatic_chr9.gripss.vcf.gz",
+  output_vcf = "/Users/mayalevy/Downloads/gridss/modified_031865-somatic_chr9.gripss.vcf.gz",
+  ref = "BSgenome.Hsapiens.UCSC.hg38",
+  n_jobs = -1
+)
+
 # Define the path to your VCF file
 # gs://cromwell-backend-ultima-data-307918/cromwell-execution/SVPipeline/9aaff528-f4e7-439e-b5b5-47ee747e2515/call-GermlineLinkVariants/NA24385_linked.vcf.bgz
 #vcf_file <- "/Users/mayalevy/Downloads/gridss/401882-CL10366-Z0082-CTCTGCTGTGCAATGAT_chr1_linked_orig.vcf.bgz"
@@ -168,8 +175,8 @@ infos$matepos <- positions[unlist(infos$MATEID), 'start']
 select <- which((positions$start < infos$matepos) | is.na(infos$matepos))
 drop <- which((positions$start > infos$matepos) & (!is.na(infos$matepos)))
 equal<- which((positions$start == infos$matepos))
-equal_select <- equal[seq(1,length(equal),2)]
-equal_drop <- equal[seq(2,length(equal),2)]
+equal_select <- if (length(equal) == 0) c() else equal[seq(1, length(equal), 2)]
+equal_drop <- if (length(equal) == 0) c() else equal[seq(2, length(equal), 2)]
 select <- sort(c(select, equal_select))
 drop   <- sort(c(drop, equal_drop))
 select_ids <- row.names(infos)[select]
