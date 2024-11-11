@@ -143,15 +143,15 @@ vcf = vcf[which(is.na(svlens) | abs(svlens) >= 30)]
 write(paste(Sys.time(),"Remove mates"), stderr())
 
 # Identify indices of deletions (DEL) in the VCF
-del_ins_indices <- which(!is.na(info(vcf)$SVTYPE) & ((info(vcf)$SVTYPE == "DEL") | ((info(vcf)$SVTYPE == "INS"))))
+del_ins_dup_indices <- which(!is.na(info(vcf)$SVTYPE) & ((info(vcf)$SVTYPE == "DEL") | (info(vcf)$SVTYPE == "INS") | (info(vcf)$SVTYPE == "DUP")))
 
 # Vectorized version of selection only a single insertion/deletion
 positions <- as.data.frame(rowRanges(vcf))
 infos <- as.data.frame(info(vcf))
 
 # Select only deletions or insertions
-positions <- positions[del_ins_indices,]
-infos <- infos[del_ins_indices,]
+positions <- positions[del_ins_dup_indices,]
+infos <- infos[del_ins_dup_indices,]
 
 # Remove locations with no MATEID
 zero.length <- lapply(infos$MATEID, length) == 0
