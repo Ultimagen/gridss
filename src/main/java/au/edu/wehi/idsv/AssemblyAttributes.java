@@ -221,19 +221,21 @@ public class AssemblyAttributes {
 		return isUnique;
 	}
 
-	private Stream<AssemblyEvidenceSupport> filterSupport(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
+	private Stream<AssemblyEvidenceSupport> filterSupport(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes, ProcessingContext context) {
 		Stream<AssemblyEvidenceSupport> stream = getSupport(aes).stream();
 		if (assemblyContigOffset != null) {
 			int requiredReadAndAssemblyBreakpointOverlap;
-			if (aes != null) {
-				requiredReadAndAssemblyBreakpointOverlap = aes.getContext().getConfig().getVariantCalling().requiredReadAndAssemblyBreakpointOverlap;
+			if (context != null) {
+				requiredReadAndAssemblyBreakpointOverlap = context.getConfig().getVariantCalling().requiredReadAndAssemblyBreakpointOverlap;
 			} else {
 				requiredReadAndAssemblyBreakpointOverlap = 0;
 			}
-			stream = stream.filter(s -> Range.range(Math.min(s.getAssemblyContigOffset().lowerEndpoint() + requiredReadAndAssemblyBreakpointOverlap, s.getAssemblyContigOffset().upperEndpoint() - requiredReadAndAssemblyBreakpointOverlap),
+			stream = stream.filter(s -> Range.range(
+					Math.min(s.getAssemblyContigOffset().lowerEndpoint() + requiredReadAndAssemblyBreakpointOverlap, s.getAssemblyContigOffset().upperEndpoint() - requiredReadAndAssemblyBreakpointOverlap),
 					s.getAssemblyContigOffset().lowerBoundType(),
-					Math.max(s.getAssemblyContigOffset().upperEndpoint() - requiredReadAndAssemblyBreakpointOverlap, s.getAssemblyContigOffset().lowerEndpoint() + requiredReadAndAssemblyBreakpointOverlap),
-					s.getAssemblyContigOffset().upperBoundType()).isConnected(assemblyContigOffset));
+					Math.max(s.getAssemblyContigOffset().upperEndpoint() - requiredReadAndAssemblyBreakpointOverlap,s.getAssemblyContigOffset().lowerEndpoint() + requiredReadAndAssemblyBreakpointOverlap),
+					s.getAssemblyContigOffset().upperBoundType()
+			).isConnected(assemblyContigOffset));
 		}
 		if (supportingCategories != null) {
 			stream = stream.filter(s -> supportingCategories.contains(s.getCategory()));
@@ -241,15 +243,19 @@ public class AssemblyAttributes {
 		if (supportTypes != null) {
 			stream = stream.filter(s -> supportTypes.contains(s.getSupportType()));
 		}
+
+		// for debugging
+		log.info("assemblyContigOffset: " + assemblyContigOffset);
+		stream = stream.peek(s -> log.info("Support: " + s.getEvidenceID() + " " + s.getAssemblyContigOffset() + " " + s.getQual() + " " + s.getCategory()));
 		return stream;
 	}
 	public Collection<String> getEvidenceIDs(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
-		return filterSupport(assemblyContigOffset, supportingCategories, supportTypes, aes)
+		return filterSupport(assemblyContigOffset, supportingCategories, supportTypes, aes,  aes.getContext())
 				.map(s -> s.getEvidenceID())
 				.collect(Collectors.toList());
 	}
 	public Set<String> getOriginatingFragmentID(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
-		return filterSupport(assemblyContigOffset, supportingCategories, supportTypes, aes)
+		return filterSupport(assemblyContigOffset, supportingCategories, supportTypes, aes, aes.getContext())
 				.map(s -> s.getFragmentID())
 				.collect(Collectors.toSet());
 	}
@@ -257,10 +263,10 @@ public class AssemblyAttributes {
 		if (assemblyContigOffset == null) {
 			throw new NullPointerException("assemblyContigOffset is required.");
 		}
-		float best = getSupportingQualScore(assemblyContigOffset.lowerEndpoint(), supportingCategories, supportTypes, aes);
+		float best = getSupportingQualScore(assemblyContigOffset.lowerEndpoint(), supportingCategories, supportTypes, aes, aes != null ? aes.getContext() : null);
 		int bestPos = assemblyContigOffset.lowerEndpoint();
 		for (int i = assemblyContigOffset.lowerEndpoint() + 1; i <= assemblyContigOffset.upperEndpoint(); i++) {
-			float current = getSupportingQualScore(i, null, null, aes);
+			float current = getSupportingQualScore(i, null, null, aes,  aes.getContext());
 			if (current < best) {
 				best = current;
 				bestPos = i;
@@ -272,10 +278,10 @@ public class AssemblyAttributes {
 		if (assemblyContigOffset == null) {
 			throw new NullPointerException("assemblyContigOffset is required.");
 		}
-		float best = getSupportingQualScore(assemblyContigOffset.lowerEndpoint(), supportingCategories, supportTypes, aes);
+		float best = getSupportingQualScore(assemblyContigOffset.lowerEndpoint(), supportingCategories, supportTypes, aes, aes.getContext());
 		int bestPos = assemblyContigOffset.lowerEndpoint();
 		for (int i = assemblyContigOffset.lowerEndpoint() + 1; i <= assemblyContigOffset.upperEndpoint(); i++) {
-			float current = getSupportingQualScore(i, null, null, aes);
+			float current = getSupportingQualScore(i, null, null, aes, aes.getContext());
 			if (current > best) {
 				best = current;
 				bestPos = i;
@@ -283,14 +289,14 @@ public class AssemblyAttributes {
 		}
 		return bestPos;
 	}
-	public int getSupportingReadCount(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
-		return (int)filterSupport(assemblyContigOffset, supportingCategories, supportTypes, aes).count();
+	public int getSupportingReadCount(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes, ProcessingContext context) {
+		return (int)filterSupport(assemblyContigOffset, supportingCategories, supportTypes, aes, context).count();
 	}
-	public int getSupportingReadCount(int assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
-		return (int)filterSupport(Range.closed(assemblyContigOffset, assemblyContigOffset), supportingCategories, supportTypes, aes).count();
+	public int getSupportingReadCount(int assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes, ProcessingContext context) {
+		return (int)filterSupport(Range.closed(assemblyContigOffset, assemblyContigOffset), supportingCategories, supportTypes, aes, context).count();
 	}
-	public float getSupportingQualScore(int assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
-		return (float)filterSupport(Range.closed(assemblyContigOffset, assemblyContigOffset), supportingCategories, supportTypes, aes).mapToDouble(s -> s.getQual()).sum();
+	public float getSupportingQualScore(int assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes, ProcessingContext context) {
+		return (float)filterSupport(Range.closed(assemblyContigOffset, assemblyContigOffset), supportingCategories, supportTypes, aes, context).mapToDouble(s -> s.getQual()).sum();
 	}
 	public int getAssemblyMaxReadLength() {
 		return record.getIntegerAttribute(SamTags.ASSEMBLY_MAX_READ_LENGTH);

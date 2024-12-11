@@ -426,7 +426,7 @@ public abstract class SingleReadEvidence implements DirectedEvidence {
 	public int constituentReads() {
 		if (AssemblyAttributes.isAssembly(getSAMRecord())) {
 			AssemblyAttributes aa = new AssemblyAttributes(record);
-			return aa.getSupportingReadCount(getBreakendAssemblyContigOffset(), null, null, null);
+			return aa.getSupportingReadCount(getBreakendAssemblyContigOffset(), null, null, null, source.getContext());
 		}
 		return 1;
 	}
@@ -488,6 +488,7 @@ public abstract class SingleReadEvidence implements DirectedEvidence {
 	public int getBreakendAssemblyContigOffset() {
 		if (assemblyOffset == Integer.MIN_VALUE && AssemblyAttributes.isAssembly(record)) {
 			AssemblyAttributes aa = new AssemblyAttributes(record);
+			log.info("Calculating assembly offset for " + record.getReadName());
 			assemblyOffset = aa.getMinQualPosition(getBreakendAssemblyContigBreakpointInterval(), null, null, null);
 		}
 		return assemblyOffset;
