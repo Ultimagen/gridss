@@ -266,7 +266,7 @@ public class AssemblyAttributes {
 		float best = getSupportingQualScore(assemblyContigOffset.lowerEndpoint(), supportingCategories, supportTypes, aes, aes != null ? aes.getContext() : null);
 		int bestPos = assemblyContigOffset.lowerEndpoint();
 		for (int i = assemblyContigOffset.lowerEndpoint() + 1; i <= assemblyContigOffset.upperEndpoint(); i++) {
-			float current = getSupportingQualScore(i, null, null, aes,  aes.getContext());
+			float current = getSupportingQualScore(i, null, null, aes,  aes != null ? aes.getContext() : null);
 			if (current < best) {
 				best = current;
 				bestPos = i;
@@ -278,7 +278,7 @@ public class AssemblyAttributes {
 		if (assemblyContigOffset == null) {
 			throw new NullPointerException("assemblyContigOffset is required.");
 		}
-		float best = getSupportingQualScore(assemblyContigOffset.lowerEndpoint(), supportingCategories, supportTypes, aes, aes.getContext());
+		float best = getSupportingQualScore(assemblyContigOffset.lowerEndpoint(), supportingCategories, supportTypes, aes, aes != null ? aes.getContext() : null);
 		int bestPos = assemblyContigOffset.lowerEndpoint();
 		for (int i = assemblyContigOffset.lowerEndpoint() + 1; i <= assemblyContigOffset.upperEndpoint(); i++) {
 			float current = getSupportingQualScore(i, null, null, aes, aes.getContext());
