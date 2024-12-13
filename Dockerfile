@@ -182,6 +182,7 @@ LABEL about.tags="Genomics"
 RUN mkdir /opt/gridss/ /data
 COPY --from=gridss_builder_c /opt/gridss/gridsstools /opt/gridss/
 COPY --from=gridss_builder_java /opt/gridss/gridss-${GRIDSS_VERSION}-gridss-jar-with-dependencies.jar /opt/gridss/
+RUN pip3 install tqdm
 COPY scripts/gridss \
 	scripts/gridss_annotate_vcf_kraken2 \
 	scripts/gridss_annotate_vcf_repeatmasker \
