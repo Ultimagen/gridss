@@ -103,8 +103,18 @@ def compare_read_mappings(first: list, second: list, mq_threshold: int) -> int:
         return -1   
     if first_poor_mq and second_poor_mq:
         return 0
+    
     first_q_span = _q_span(first)
     second_q_span = _q_span(second)
+
+    # prioritize cases when the mapping is not split into two parts
+    if len(first) > 1 and len(second) == 1:
+        if first_q_span - 10 <= second_q_span:
+            return -1
+    if len(first) == 1 and len(second) > 1:
+        if second_q_span - 10 <= first_q_span:
+            return 1
+    
     if first_q_span > second_q_span:
         return 1
     if first_q_span < second_q_span:
