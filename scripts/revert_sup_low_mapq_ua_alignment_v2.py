@@ -12,6 +12,7 @@ def parse_args():
     parser.add_argument('--alignment_source', required=True, type=str, action='append', help='Alignment sources (specify multiple times)')
     parser.add_argument('--output', required=True, type=str,help='The output realigned file')
     parser.add_argument('--min_mapping_quality', type=int, default=60, help='low mapping quality threshold')
+    parser.add_argument('--tie_breaker_idx', type=int, default=None, help='Index of the alignment source to prioritize in case of a tie (e.g. giraffe)')
     args = parser.parse_args()
     args.alignment_sources = args.alignment_source
     return args
@@ -78,7 +79,7 @@ def _q_span(mappings: list) -> int:
     '''
     return max([x.end for x in mappings]) - min([x.start for x in mappings])
 
-def compare_read_mappings(first: list, second: list, mq_threshold: int) -> int:
+def compare_read_mappings(first: list, second: list, mq_threshold: int, idx1:int, idx2: int, tie_breaker_idx: int) -> int:
     '''Compare two lists of MappingKey objects
 
     Parameters
@@ -89,6 +90,12 @@ def compare_read_mappings(first: list, second: list, mq_threshold: int) -> int:
         List of MappingKey objects
     mq_threshold : int
         Mapping quality threshold
+    idx1 : int
+        Sourse of the first alignment
+    idx2 : int
+        Sourse of the second alignment
+    tie_breaker_idx : int
+        If one of the alignments is from `tie_breakder_idx` source (e.g. giraffe) and they are of equal quality - we choose the one from `tie_breaker_idx`
 
     Returns
     -------
@@ -119,9 +126,13 @@ def compare_read_mappings(first: list, second: list, mq_threshold: int) -> int:
         return 1
     if first_q_span < second_q_span:
         return -1
+    if idx1 == tie_breaker_idx:
+        return 1
+    if idx2 == tie_breaker_idx:
+        return -1
     return 0
     
-def find_best_mapping_index(mappings: list, mq_threshold: int) -> int:
+def find_best_mapping_index(mappings: list, mq_threshold: int, tie_breaker_idx: int = None) -> int:
     '''Find the best mapping index
 
     Parameters
@@ -130,7 +141,8 @@ def find_best_mapping_index(mappings: list, mq_threshold: int) -> int:
         List of MappingKey objects
     mq_threshold : int
         Mapping quality threshold
-
+    tie_breaker_idx : int
+        Provided if one of the alignments is from `tie_breakder_idx` source (e.g. giraffe)
     Returns
     -------
     int
@@ -138,7 +150,7 @@ def find_best_mapping_index(mappings: list, mq_threshold: int) -> int:
     '''
     best_index = 0
     for i in range(1, len(mappings)):
-        comp = compare_read_mappings(mappings[best_index], mappings[i], mq_threshold)
+        comp = compare_read_mappings(mappings[best_index], mappings[i], mq_threshold, best_index, i, tie_breaker_idx=tie_breaker_idx)
         if comp == -1:
             best_index = i
     return best_index
@@ -158,7 +170,7 @@ def run():
     best_mappings = {}
     logger.info(f"Choosing best alignment per read: start")    
     for k in mappings[0].keys():
-        best_mappings[k] = find_best_mapping_index([x[k] for x in mappings], args.min_mapping_quality)
+        best_mappings[k] = find_best_mapping_index([x[k] for x in mappings], args.min_mapping_quality, args.tie_breaker_idx)
     logger.info(f"Choosing best alignment per read: end")    
 
 
