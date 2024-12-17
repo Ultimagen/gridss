@@ -302,7 +302,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                 sequence = read.query_sequence
                 # Skip reads without a query sequence, or with ambiguous bases
                 skip_read = sequence is None or not all(c in 'atgc' for c in sequence.lower())
-                skip_read = skip_read and read_is_candidate_for_realign(read, min_required_softclip_length)
+                skip_read = skip_read or not read_is_candidate_for_realign(read, min_required_softclip_length)
                 if not skip_read:
                     # Search for homopolymers in the sequence
                     edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence,

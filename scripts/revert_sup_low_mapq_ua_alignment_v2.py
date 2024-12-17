@@ -6,6 +6,9 @@ import numpy as np
 import tqdm.auto as tqdm
 import logging
 
+def comma_sep(x):
+    xsp = x.split(',')
+    return (xsp[0],xsp[1],xsp[2])
 def parse_args():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Merge haplotype alignments from multiple sources')
@@ -13,6 +16,7 @@ def parse_args():
     parser.add_argument('--output', required=True, type=str,help='The output realigned file')
     parser.add_argument('--min_mapping_quality', type=int, default=60, help='low mapping quality threshold')
     parser.add_argument('--tie_breaker_idx', type=int, default=None, help='Index of the alignment source to prioritize in case of a tie (e.g. giraffe)')
+    parser.add_argument('--overwrite_mapq', type=comma_sep, help="Comma-separated tuple of three values: index of source to overwrite, min_mapq to change, value_to_assign")
     args = parser.parse_args()
     args.alignment_sources = args.alignment_source
     return args
@@ -163,6 +167,7 @@ def run():
     logger.info(f"Alignment sources: {args.alignment_sources}")
     logger.info(f"Output: {args.output}")
     logger.info(f"Min mapping quality: {args.min_mapping_quality}")
+    logger.info(f"Tie breaker index: {args.tie_breaker_idx}")
     logger.info(f"Reading alignment files and creating mapping keys:start")
     mappings = [sorted([ MappingKey(rec) for rec in pysam.AlignmentFile(x, "rb") ], key=lambda x: x.name) for x in args.alignment_sources]
     logger.info(f"Reading alignment files and creating mapping keys:done")
@@ -183,6 +188,9 @@ def run():
             input = pysam.AlignmentFile(r, "rb")
             for rec in tqdm.tqdm(input):
                 if best_mappings[rec.query_name] == i:
+                    if args.overwrite_mapq is not None and args.overwrite_mapq[0] == i:
+                        if rec.mapping_quality >= args.overwrite_mapq[1] and rec.mapping_quality < args.overwrite_mapq[2]:
+                            rec.mapping_quality = args.overwrite_mapq[2]
                     output.write(rec)
                     counters[i] += 1
             logger.info(f"Wrote {counters[i]} alignments from {r}")
