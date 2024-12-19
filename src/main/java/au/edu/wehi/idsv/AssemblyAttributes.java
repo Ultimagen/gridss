@@ -243,10 +243,6 @@ public class AssemblyAttributes {
 		if (supportTypes != null) {
 			stream = stream.filter(s -> supportTypes.contains(s.getSupportType()));
 		}
-
-		// for debugging
-		log.info("assemblyContigOffset: " + assemblyContigOffset);
-		stream = stream.peek(s -> log.info("Support: " + s.getEvidenceID() + " " + s.getAssemblyContigOffset() + " " + s.getQual() + " " + s.getCategory()));
 		return stream;
 	}
 	public Collection<String> getEvidenceIDs(Range<Integer> assemblyContigOffset, Set<Integer> supportingCategories, Set<AssemblyEvidenceSupport.SupportType> supportTypes, AssemblyEvidenceSource aes) {
@@ -263,6 +259,7 @@ public class AssemblyAttributes {
 		if (assemblyContigOffset == null) {
 			throw new NullPointerException("assemblyContigOffset is required.");
 		}
+
 		float best = getSupportingQualScore(assemblyContigOffset.lowerEndpoint(), supportingCategories, supportTypes, aes, aes != null ? aes.getContext() : null);
 		int bestPos = assemblyContigOffset.lowerEndpoint();
 		for (int i = assemblyContigOffset.lowerEndpoint() + 1; i <= assemblyContigOffset.upperEndpoint(); i++) {

@@ -488,7 +488,6 @@ public abstract class SingleReadEvidence implements DirectedEvidence {
 	public int getBreakendAssemblyContigOffset() {
 		if (assemblyOffset == Integer.MIN_VALUE && AssemblyAttributes.isAssembly(record)) {
 			AssemblyAttributes aa = new AssemblyAttributes(record);
-			log.info("Calculating assembly offset for " + record.getReadName());
 			assemblyOffset = aa.getMinQualPosition(getBreakendAssemblyContigBreakpointInterval(), null, null, null);
 		}
 		return assemblyOffset;
