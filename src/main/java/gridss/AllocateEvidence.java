@@ -113,7 +113,6 @@ public class AllocateEvidence extends VcfTransformCommandLineProgram {
 		return new AutoClosingIterator<>(new AssemblyAssociator(it, mergedAssemblies, windowSize), assToClose.toArray(new Closeable[0]));
 	}
 	private VariantContextDirectedEvidence annotate(VariantEvidenceSupport ves) {
-		log.info("Variant:" + ves.variant.getID());
 		VariantCallingConfiguration vc = getContext().getConfig().getVariantCalling();
 		StructuralVariationCallBuilder builder = new StructuralVariationCallBuilder(getContext(), lookup, ves.variant);
 		builder.setUpdateAssemblyInformation(ALLOCATE_ASSEMBLIES);

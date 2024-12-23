@@ -68,15 +68,10 @@ public class SoftClipEvidence extends SingleReadEvidence {
 	private float scoreAssembly() {
 		AssemblyAttributes attr = new AssemblyAttributes(getSAMRecord());
 		int pos = getBreakendAssemblyContigOffset();
-		log.info("Scoring assembly at " + pos);
 		int rp = attr.getSupportingReadCount(pos, null, ImmutableSet.of(AssemblyEvidenceSupport.SupportType.ReadPair), null, source.getContext());
-		log.info("Read pair support: " + rp);
 		double rpq = attr.getSupportingQualScore(pos, null, ImmutableSet.of(AssemblyEvidenceSupport.SupportType.ReadPair), null, source.getContext());
-		log.info("Read pair quality: " + rpq);
 		int sc = attr.getSupportingReadCount(pos, null, ImmutableSet.of(AssemblyEvidenceSupport.SupportType.Read), null, source.getContext());
-		log.info("Read support: " + sc);
 		double scq = attr.getSupportingQualScore(pos, null, ImmutableSet.of(AssemblyEvidenceSupport.SupportType.Read), null, source.getContext());
-		log.info("Read quality: " + scq);
 		return (float)getEvidenceSource().getContext().getConfig().getScoring().getModel().scoreBreakendAssembly(this,
 				rp, rpq,
 				sc, scq,
