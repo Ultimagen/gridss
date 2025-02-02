@@ -14,9 +14,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Merge haplotype alignments from multiple sources')
     parser.add_argument('--alignment_source', required=True, type=str, action='append', help='Alignment sources (specify multiple times)')
     parser.add_argument('--output', required=True, type=str,help='The output realigned file')
-    parser.add_argument('--min_mapping_quality', type=int, default=60, help='low mapping quality threshold')
+    parser.add_argument('--min_mapping_quality', type=int, default=60, help='Supplementary alignments with mapping quality below this threshold will be considered poor')
     parser.add_argument('--tie_breaker_idx', type=int, default=None, help='Index of the alignment source to prioritize in case of a tie (e.g. giraffe)')
-    parser.add_argument('--overwrite_mapq', type=comma_sep, help="Comma-separated tuple of three values: index of source to overwrite, min_mapq to change, value_to_assign")
+    parser.add_argument('--overwrite_mapq', type=comma_sep, help="Comma-separated tuple of three values: index of source to overwrite, min_mapq to change, value_to_assign. Useful for overwriting low-scale mapping qualities of giraffe")
     args = parser.parse_args()
     args.alignment_sources = args.alignment_source
     return args
@@ -84,7 +84,12 @@ def _q_span(mappings: list) -> int:
     return max([x.end for x in mappings]) - min([x.start for x in mappings])
 
 def compare_read_mappings(first: list, second: list, mq_threshold: int, idx1:int, idx2: int, tie_breaker_idx: int) -> int:
-    '''Compare two lists of MappingKey objects
+    '''Compare two lists of MappingKey objects. The comparison is based on the following criteria:
+    1. If one of the alignments is from a source with poor mapping quality, we choose the one from the source with better quality
+    2. If both alignments are from sources with poor mapping quality, we consider them equal
+    3. If one alignment is not split into two parts and the other is, we choose the one that is not split
+    4. If both alignments are split into two parts, we choose the one with the larger query span
+    5. If the query span is equal, we choose the one from the source specified as a tie breaker
 
     Parameters
     ----------
@@ -151,6 +156,10 @@ def find_best_mapping_index(mappings: list, mq_threshold: int, tie_breaker_idx: 
     -------
     int
         Best mapping index
+    
+    See also
+    --------
+    compare_read_mappings
     '''
     best_index = 0
     for i in range(1, len(mappings)):
@@ -163,20 +172,20 @@ def run():
     args = parse_args()
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
     logger = logging.getLogger(__name__)    
-    logger.info(f"Merging alignments: start")
+    logger.info("Merging alignments: start")
     logger.info(f"Alignment sources: {args.alignment_sources}")
     logger.info(f"Output: {args.output}")
     logger.info(f"Min mapping quality: {args.min_mapping_quality}")
     logger.info(f"Tie breaker index: {args.tie_breaker_idx}")
-    logger.info(f"Reading alignment files and creating mapping keys:start")
+    logger.info("Reading alignment files and creating mapping keys:start")
     mappings = [sorted([ MappingKey(rec) for rec in pysam.AlignmentFile(x, "rb") ], key=lambda x: x.name) for x in args.alignment_sources]
-    logger.info(f"Reading alignment files and creating mapping keys:done")
+    logger.info("Reading alignment files and creating mapping keys:done")
     mappings = [ {k: list(v) for k, v in itertools.groupby(x, key=lambda x: x.name)} for x in mappings]
     best_mappings = {}
-    logger.info(f"Choosing best alignment per read: start")    
+    logger.info("Choosing best alignment per read: start")    
     for k in mappings[0].keys():
         best_mappings[k] = find_best_mapping_index([x[k] for x in mappings], args.min_mapping_quality, args.tie_breaker_idx)
-    logger.info(f"Choosing best alignment per read: end")    
+    logger.info("Choosing best alignment per read: end")    
 
 
     # Create a new BAM file for output
