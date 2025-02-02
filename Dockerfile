@@ -193,8 +193,7 @@ COPY scripts/gridss \
 	scripts/gridss.config.R \
 	scripts/libgridss.R \
 	scripts/link_breakpoints.R \
-	scripts/revert_sup_low_mapq_ua_alignment.py \
-	scripts/revert_sup_low_mapq_ua_alignment_v2.py \
+	scripts/choose_best_haplotype_realignment.py \
 	scripts/align_long_homopolymers.py \
 	scripts/convert_vcf_format.R \
 	/opt/gridss/
