@@ -1,6 +1,8 @@
 # DESCRIPTION
 #    This script realigns haplotypes in the areas that contain long homopolymer runs,
 #    where UG data introduces false variation due to the limit on calling homopolymer length
+from itertools import accumulate
+
 import numpy as np
 import pysam
 import argparse
@@ -32,7 +34,7 @@ def create_aligner(mode, match, mismatch, gap_penalty, gap_extension_penalty, sc
 
     return aligner
 
-def run_alignment(fa_seq, sequence, start_pos, sc_length, aligner):
+def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner):
     """
     Perform the alignment between two sequences
     @param fa_seq: The reference sequence
@@ -44,74 +46,57 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, aligner):
     """
     # Perform the alignment between two sequences
     if len(fa_seq) == 0 or len(sequence) == 0:
-        return 0, "", 0, 0, 0, 0
+        return 0, 0, 0
     for alignment in aligner.align(fa_seq, sequence):
         # Print each alignment's score and the alignment itself
-        start_pos_adjust, cigar, q_start, r_start = convert_alignment_to_cigar(alignment.aligned, len(sequence))
-        start_pos = start_pos - sc_length + start_pos_adjust
-        return alignment.score, cigar, start_pos, q_start, r_start, alignment.length
-    return 0, "", 0, 0, 0, 0
+        start_pos_adjust, end_pos_adjust = adjust_start_end_positions(start_pos - sc_length, alignment.aligned, alignment.length, hap_cigar)
 
-def convert_alignment_to_cigar(aligned, seq2_len):
+        return alignment.score, start_pos_adjust, end_pos_adjust
+    return 0, 0, 0
+
+def adjust_start_end_positions(start_pos, aligned, alignmnet_length, hap_cigar_tuples):
     """
         Convert the aligned segments in biopython format to a CIGAR farmat.
     """
     target_aligned, query_aligned = aligned
-    cigar = []
     adjusted_start_pos = 0  # This will store the adjusted start position based on initial target insertions
 
     if aligned.size == 0:
-        return adjusted_start_pos, '0M', 0, 0
+        return start_pos + adjusted_start_pos, start_pos + adjusted_start_pos
 
-    # Helper function to add operation to CIGAR
-    def add_op(op, length):
-        if length > 0:
-            cigar.append(f"{length}{op}")
 
-    last_target_end, last_query_end = 0, 0
-    first_time = True
-    for (t_start, t_end), (q_start, q_end) in zip(target_aligned, query_aligned):
-        # Handle gaps before this aligned segment
-        t_gap = t_start - last_target_end
-        q_gap = q_start - last_query_end
+    t_gap = target_aligned[0][0]
+    if t_gap > 0:
+        adjusted_start_pos = t_gap
 
-        # Determine initial soft clipping for the query and adjust start_pos for target insertions
-        if first_time:
-            first_time = False
-            if t_gap > 0:
-                adjusted_start_pos = t_gap
-            if q_gap > 0:
-                add_op('S', q_gap)
+    adjusted_end_pos = adjusted_start_pos + alignmnet_length
+    # adjust end position by hap_cigar_tuples
+    accumulate_length = 0
+    for op, length in hap_cigar_tuples:
 
-        # Adjust for gaps
-        # Compare t_gap and q_gap to determine order
-        elif t_gap > 0 and q_gap > 0:
-            # Both gaps exist, determine order
-            if t_start < q_start:
-                # Deletion occurs first
-                add_op('D', t_gap)
-                add_op('I', q_gap)
+
+        if op == 1: # insertion
+            if accumulate_length <= adjusted_start_pos:
+                adjusted_start_pos -= min(length, adjusted_start_pos - accumulate_length)
+            if accumulate_length <= adjusted_end_pos:
+                adjusted_end_pos -= min(length, adjusted_end_pos - accumulate_length)
             else:
-                # Insertion occurs first
-                add_op('I', q_gap)
-                add_op('D', t_gap)
-        else:
-            # Only one type of gap exists
-            if t_gap > 0: add_op('D', t_gap)
-            if q_gap > 0: add_op('I', q_gap)
+                break
 
-        # Add matched segment
-        segment_length = min(t_end - t_start, q_end - q_start)
-        add_op('M', segment_length)
+        elif op == 2: # deletion
+            if accumulate_length <= adjusted_start_pos:
+                adjusted_start_pos += min(length, adjusted_start_pos - accumulate_length)
+            if accumulate_length <= adjusted_end_pos:
+                adjusted_end_pos += min(length, adjusted_end_pos - accumulate_length)
+            else:
+                break
 
-        # Update last processed positions
-        last_target_end, last_query_end = t_end, q_end
+        accumulate_length += length
 
-    # Handle gaps after the last aligned segment - add soft-clipping for the remaining query
-    if last_query_end < seq2_len:
-        add_op('S', seq2_len - last_query_end)  # Treat remaining query as soft clipped
+    return start_pos + adjusted_start_pos, start_pos + adjusted_end_pos
 
-    return adjusted_start_pos, ''.join(cigar), query_aligned[0][0], target_aligned[0][0]  # , query_aligned[-1][1]
+
+
 
 def find_best_haplotype(read, local_aligner):
     # in case cigar starts with soft clip, we need to adjust the haplotype start
@@ -164,14 +149,15 @@ def find_best_haplotype(read, local_aligner):
 
 
             # local alignment
-            score, cigar, start_pos_local, q_start_local, r_start_local, align_length = run_alignment(hap_seq,
+            score, start_pos_local, end_pos_local = run_alignment(hap_seq,
                                                                                               read_seq,
                                                                                               hap_start_position,
                                                                                               0,
+                                                                                              hap.cigartuples,
                                                                                               local_aligner)
-
-            print(
-                f"Processing haplotype {hap.query_name} Alignment score: {score} start_pos_local: {start_pos_local} end position: {start_pos_local + align_length}")
+            if((hap.query_name=="HC_chr13:30036276_1012" or hap.query_name=="HC_chr1:157309164_1024") and read.query_name =="031865_2-Z0134-0007858033"):
+                print(
+                    f"Processing haplotype {hap.query_name} Alignment score: {score} start_pos_local: {start_pos_local} end position: {end_pos_local}")
 
             if (# overlap check
                 (read_start_position <= hap_end_position) and
@@ -182,11 +168,18 @@ def find_best_haplotype(read, local_aligner):
                 best_score = score
                 best_hap = hap
                 best_start_point = start_pos_local - hap_start_position
-                best_end_point = start_pos_local + align_length - hap_start_position
-        if best_hap is not None:
-            print(f"Best haplotype for read {read.query_name} is {best_hap.query_name} with score {best_score} start point {best_start_point} end point {best_end_point}")
-        else:
-            print(f"No haplotype found for read {read.query_name}")
+                best_end_point = end_pos_local - hap_start_position
+        # if best_hap is not None:
+        #     print(f"Best haplotype for read {read.query_name} is {best_hap.query_name} with score {best_score} start point {best_start_point} end point {best_end_point}")
+        # else:
+        #     print(f"No haplotype found for read {read.query_name}")
+        # remove the temporary file
+        subprocess.check_call(f"rm {args.output}_temp_hap.bam", shell=True)
+        subprocess.check_call(f"rm {args.output}_temp_hap.bam.bai", shell=True)
+        # in case hap direction is reverse, we need to reverse the start and end points
+        if best_hap is not None and best_hap.is_reverse:
+            best_start_point, best_end_point = max(best_hap.query_length - best_end_point + 1, 0), best_hap.query_length - best_start_point + 1
+
         return best_hap, best_score, best_start_point, best_end_point
 
 
@@ -206,15 +199,15 @@ MIN_CONTIG_LENGTH = 100000
 
 
 
+
 if(args.region is not None):
 
     logger.info(f"Processing region {args.region}")
     # assembly file is in CRAM format, extract the region
     subprocess.check_call(
-        f"samtools view -b {args.assembly} {args.region} -o {args.output}_temp_{args.region}.bam",
+        f"samtools view -b {args.assembly} {args.region} -o {args.output}_temp_assembly_{args.region}.bam",
         shell=True)
-    subprocess.check_call(f"samtools index {args.output}_temp_{args.region}.bam", shell=True)
-    args.assembly = args.output + f"_temp_{args.region}.bam"
+    subprocess.check_call(f"samtools index {args.output}_temp_assembly_{args.region}.bam", shell=True)
     # tumor crams, extract the region
     for i in range(len(args.tumor_crams)):
         subprocess.check_call(
@@ -231,15 +224,17 @@ if(args.region is not None):
         subprocess.check_call(f"samtools index {args.output}_temp_germline_{args.region}_{i}.bam", shell=True)
         args.germline_crams[i] = args.output + f"_temp_germline_{args.region}_{i}.bam"
 
-    tumor_crams = [f"{args.output}_temp_germline_{args.region}_{i}.bam" for i in range(len(args.tumor_crams))]
+    tumor_crams = [f"{args.output}_temp_tumor_{args.region}_{i}.bam" for i in range(len(args.tumor_crams))]
     germline_crams = [f"{args.output}_temp_germline_{args.region}_{i}.bam" for i in range(len(args.germline_crams))]
     merged_tumor_cram = f"{args.output}_temp_merged_tumor_{args.region}.bam"
     merged_germline_cram = f"{args.output}_temp_merged_germline_{args.region}.bam"
+    assembly = f"{args.output}_temp_assembly_{args.region}.bam"
 else:
     tumor_crams = args.tumor_crams
     germline_crams = args.germline_crams
     merged_tumor_cram = f"{args.output}_temp_merged_tumor.bam"
     merged_germline_cram = f"{args.output}_temp_merged_germline.bam"
+    assembly = args.assembly
 
 
 if len(args.tumor_crams) > 0:
@@ -248,6 +243,18 @@ if len(args.tumor_crams) > 0:
 
 subprocess.check_call(f"samtools merge -f {merged_germline_cram} {' '.join([cram for cram in germline_crams])}", shell=True)
 subprocess.check_call(f"samtools index {merged_germline_cram}", shell=True)
+
+# remove temporary files
+if(args.region is not None):
+    for i in range(len(tumor_crams)):
+        subprocess.check_call(f"rm {tumor_crams[i]}", shell=True)
+        subprocess.check_call(f"rm {tumor_crams[i]}.bai", shell=True)
+    for i in range(len(germline_crams)):
+        subprocess.check_call(f"rm {germline_crams[i]}", shell=True)
+        subprocess.check_call(f"rm {germline_crams[i]}.bai", shell=True)
+    subprocess.check_call(f"rm {assembly}", shell=True)
+    subprocess.check_call(f"rm {assembly}.bai", shell=True)
+
 
 class SupportingRead:
     def __init__(self, read_name, start_overlap, end_overlap, score, category):
@@ -271,22 +278,22 @@ local_aligner = create_aligner('local', match, mismatch, gap_penalty, gap_extens
 haps_map = dict()
 
 # align tumor reads to haplotype
-if len(args.tumor_crams) > 0:
-    with pysam.AlignmentFile(args.output+"_temp_merged_tumor.cram") as reads_cram:
-            for read in reads_cram.fetch():
-                print(f"Processing read {read.query_name} {read.reference_name}:{read.reference_start}-{read.reference_end}")
-                best_hap, best_score, start_point, end_point = find_best_haplotype(read, local_aligner)
-                if best_hap is not None:
-                    if best_hap not in haps_map:
-                        haps_map[best_hap] = []
-                    # Append the SupportingRead object to the list
-                    haps_map[best_hap].append(
-                        SupportingRead(read.query_name, start_point, end_point, best_score, 0))
+# if len(args.tumor_crams) > 0:
+#     with pysam.AlignmentFile(merged_tumor_cram) as reads_cram:
+#             for read in reads_cram.fetch():
+#                 #print(f"Processing read {read.query_name} {read.reference_name}:{read.reference_start}-{read.reference_end}")
+#                 best_hap, best_score, start_point, end_point = find_best_haplotype(read, local_aligner)
+#                 if best_hap is not None:
+#                     if best_hap not in haps_map:
+#                         haps_map[best_hap] = []
+#                     # Append the SupportingRead object to the list
+#                     haps_map[best_hap].append(
+#                         SupportingRead(read.query_name, start_point, end_point, best_score, 0))
 
 # align germline reads to haplotype
-with pysam.AlignmentFile(args.output+"_temp_merged_germline.cram") as reads_cram:
+with pysam.AlignmentFile(merged_germline_cram) as reads_cram:
         for read in reads_cram.fetch():
-            print(f"Processing read {read.query_name} {read.reference_name}:{read.reference_start}-{read.reference_end}")
+            #print(f"Processing read {read.query_name} {read.reference_name}:{read.reference_start}-{read.reference_end}")
             best_hap, best_score, start_point, end_point = find_best_haplotype(read, local_aligner)
             if best_hap is not None:
                 if best_hap not in haps_map:
@@ -295,8 +302,15 @@ with pysam.AlignmentFile(args.output+"_temp_merged_germline.cram") as reads_cram
                 haps_map[best_hap].append(
                     SupportingRead(read.query_name, start_point, end_point, best_score, 1))
 
+# remove temporary files
+if len(args.tumor_crams) > 0:
+    subprocess.check_call(f"rm {merged_tumor_cram}", shell=True)
+    subprocess.check_call(f"rm {merged_tumor_cram}.bai", shell=True)
+subprocess.check_call(f"rm {merged_germline_cram}", shell=True)
+subprocess.check_call(f"rm {merged_germline_cram}.bai", shell=True)
+
 # write the haplotypes to the output file
-print("Writing the haplotypes to the output file")
+#print("Writing the haplotypes to the output file")
 with pysam.AlignmentFile(args.assembly) as assembly:
     with pysam.AlignmentFile(args.output + "_unsorted.bam", "wb", template=assembly) as output:
         # write each haplotype as a row in the output file
@@ -315,3 +329,6 @@ with pysam.AlignmentFile(args.assembly) as assembly:
 # index output file
 subprocess.check_call(f"samtools sort {args.output}_unsorted.bam -o {args.output}", shell=True)
 subprocess.check_call(f"samtools index {args.output}", shell=True)
+
+# remove unsoreted file
+subprocess.check_call(f"rm {args.output}_unsorted.bam", shell=True)
