@@ -31,16 +31,17 @@ def adjust_and_merge_cigar(cigar):
         """
         length1, op1, length2, op2 = match.groups()
         length1, length2 = int(length1), int(length2)
-
+        adjusted_sequence = ''
         if op1 == op2:
             return f"{length1 + length2}{op1}"
         else:
             overlap = min(length1, length2)
             leftover = abs(length1 - length2)
-            adjusted_sequence = f'{overlap}M'
             if leftover > 0:
                 leftover_op = op1 if length1 > length2 else op2
                 adjusted_sequence += f'{leftover}{leftover_op}'
+
+            adjusted_sequence += f'{overlap}M'
             return adjusted_sequence
 
     def merge_similar_operations(cigar):
@@ -322,8 +323,8 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                     if ref_del_length > del_length:
                         # In case the reference has more deletions than the read, we need to adjust the read
                         fa_seq = reference[read.reference_name][
-                                 max(read.reference_start - sc_length, 0): read.reference_start + len(
-                                     sequence) - sc_length + ref_del_length - del_length].seq.upper()
+                                 max(read.reference_start - sc_length, 0) - ref_del_length: read.reference_start + len(
+                                     sequence) - sc_length + del_length].seq.upper()
                         edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
                                                                                                            homopolymer_length)
 
@@ -335,7 +336,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                                                                                                      local_aligner,
                                                                                                      edited_fa_seq,
                                                                                                      edited_sequence,
-                                                                                                     read.reference_start,
+                                                                                                     read.reference_start - ref_del_length,
                                                                                                      sc_length,
                                                                                                      start_end_del_tuples)
                     choices[choice] += 1
@@ -349,11 +350,11 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                     updated_cigar = cigar
                     # Insertions by the query
                     for start_del, end_del in start_end_del_tuples:
-                        updated_cigar, _ = insert_operation_into_cigar(updated_cigar, start_del, end_del - start_del, 0,
+                        updated_cigar, _ = insert_operation_into_cigar(updated_cigar, start_del - homopolymer_length, end_del - start_del, 0,
                                                                        'I')
                     # Deletions by the reference
                     for start_del, end_del in ref_start_end_del_tuples:
-                        updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - r_start,
+                        updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - r_start - homopolymer_length,
                                                                                end_del - start_del, start_pos, 'D')
 
                     adjusted_cigar = adjust_and_merge_cigar(updated_cigar)
