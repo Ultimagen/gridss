@@ -320,10 +320,10 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                     edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
                                                                                                        homopolymer_length)
 
-                    if ref_del_length > del_length:
+                    if ref_del_length > 0:
                         # In case the reference has more deletions than the read, we need to adjust the read
                         fa_seq = reference[read.reference_name][
-                                 max(read.reference_start - sc_length, 0) - ref_del_length: read.reference_start + len(
+                                 max(read.reference_start - sc_length - ref_del_length, 0) : read.reference_start + len(
                                      sequence) - sc_length + del_length].seq.upper()
                         edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
                                                                                                            homopolymer_length)
@@ -348,14 +348,15 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
 
                     # Add insertions and deletions into the CIGAR string
                     updated_cigar = cigar
-                    # Insertions by the query
-                    for start_del, end_del in start_end_del_tuples:
-                        updated_cigar, _ = insert_operation_into_cigar(updated_cigar, start_del - homopolymer_length, end_del - start_del, 0,
-                                                                       'I')
+
                     # Deletions by the reference
                     for start_del, end_del in ref_start_end_del_tuples:
                         updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - r_start - homopolymer_length,
                                                                                end_del - start_del, start_pos, 'D')
+
+                    for start_del, end_del in start_end_del_tuples:
+                        updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - homopolymer_length, end_del - start_del, start_pos,
+                                                                       'I')
 
                     adjusted_cigar = adjust_and_merge_cigar(updated_cigar)
                     read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
@@ -484,9 +485,14 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
     accumulated_length = 0
     operation_inserted = False
     i = 0
-    if position < 0 and op_type == 'D':
+    if position <= 0 and op_type == 'D':
         start_pos += op_size
         return cigar, start_pos
+    if position <= 0 and op_type == 'I':
+        if parsed_cigar[0][0] == 'S':
+            return f"{op_size}S" + cigar, start_pos
+        else:
+            return f"{op_size}M" + cigar, start_pos
     while i < len(parsed_cigar):
         op, count = parsed_cigar[i]
         skip_operation = False
