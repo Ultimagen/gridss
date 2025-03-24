@@ -54,6 +54,9 @@ def adjust_and_merge_cigar(cigar):
 
         for op, length in cigar_string_to_cigartuples(cigar, convert_int=False):
             length = int(length)
+            if last_op is None and op=='I':
+                op = 'S'
+                last_length = length
             if op == last_op:
                 last_length += length
             else:
@@ -69,6 +72,7 @@ def adjust_and_merge_cigar(cigar):
 
     adjusted_cigar = re.sub(r'(\d+)([DI])(\d+)([DI])', calculate_adjustment, cigar)
     merged_cigar = merge_similar_operations(adjusted_cigar)
+
 
     return merged_cigar
 
@@ -355,8 +359,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                                                                                end_del - start_del, start_pos, 'D')
 
                     for start_del, end_del in start_end_del_tuples:
-                        updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - homopolymer_length, end_del - start_del, start_pos,
-                                                                       'I')
+                        updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - homopolymer_length, end_del - start_del, start_pos,'I')
 
                     adjusted_cigar = adjust_and_merge_cigar(updated_cigar)
                     read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
@@ -486,13 +489,16 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
     operation_inserted = False
     i = 0
     if position <= 0 and op_type == 'D':
-        start_pos += op_size
-        return cigar, start_pos
+        if parsed_cigar[0][0] == 'S':
+            start_pos += op_size
+            return cigar, start_pos
+        else:
+            return f"{op_size}D" + cigar, start_pos
     if position <= 0 and op_type == 'I':
         if parsed_cigar[0][0] == 'S':
             return f"{op_size}S" + cigar, start_pos
         else:
-            return f"{op_size}M" + cigar, start_pos
+            return f"{op_size}I" + cigar, start_pos
     while i < len(parsed_cigar):
         op, count = parsed_cigar[i]
         skip_operation = False

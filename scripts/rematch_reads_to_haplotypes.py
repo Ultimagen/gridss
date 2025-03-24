@@ -10,6 +10,8 @@ import logging
 import subprocess
 from Bio import Align
 import array
+import pyfaidx
+from pysam import reference
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__ if __name__ != "__main__" else "rematch_reads_to_haplotypes")
@@ -98,7 +100,7 @@ def adjust_start_end_positions(start_pos, aligned, alignmnet_length, hap_cigar_t
 
 
 
-def find_best_haplotype(read, local_aligner):
+def find_best_haplotype(read, local_aligner, reference):
     # in case cigar starts with soft clip, we need to adjust the haplotype start
     sc_size_start = 0
     sc_size_end = 0
@@ -115,72 +117,77 @@ def find_best_haplotype(read, local_aligner):
     else:
         read_end = read.reference_end
 
+    # find the best alignment
+    best_score = -np.inf
+    best_hap = None
+    best_start_point = None
+    best_end_point = None
+    read_seq = read.query_sequence
     # extract the region of the assembly that the read overlaps
-    subprocess.check_call(
-        f"samtools view -b {args.assembly} {read.reference_name}:{read_start}-{read_end} -o {args.output}_temp_hap.bam",
-        shell=True)
-    subprocess.check_call(f"samtools index {args.output}_temp_hap.bam", shell=True)
-    # open the extracted region and find the best haplotype
-    with (pysam.AlignmentFile(args.output + "_temp_hap.bam") as hap_cram):
-        # find the best alignment
-        best_score = -np.inf
-        best_hap = None
-        best_start_point = None
-        best_end_point = None
-        read_seq = read.query_sequence
-        for hap in hap_cram.fetch():
+    with pysam.AlignmentFile(args.assembly, "rb") as assembly:
+        for hap in assembly.fetch(read.reference_name, read_start, read_end):
+            if not (hap.flag & 1024) and (
+                    category == 1 or any(op in {1, 2, 4} and length > 20 for op, length in (hap.cigartuples or []))):
+                # only in case we overlap the breakpoint
+                # read.reference_start is the breakpoint position
+                hap_sc_size_start = 0
+                hap_sc_size_end = 0
+                if hap.cigar[0][0] == 4:
+                    hap_sc_size_start = hap.cigar[0][1]
+
+                if hap.cigar[-1][0] == 4:
+                    hap_sc_size_end = hap.cigar[-1][1]
+
+                hap_seq = hap.query_sequence
+                hap_start_position = hap.reference_start - hap_sc_size_start
+                hap_end_position = hap.reference_end + hap_sc_size_end
+                read_start_position = read.reference_start - sc_size_start
+                read_end_position = read.reference_end + sc_size_end
+                # local alignment
+                score, start_pos_local, end_pos_local = run_alignment(hap_seq,
+                                                                      read_seq,
+                                                                      hap_start_position,
+                                                                      0,
+                                                                      hap.cigartuples,
+                                                                      local_aligner)
+                if (# overlap check
+                    (read_start_position <= hap_end_position) and
+                    (read_end_position >= hap_start_position) and
+                    ((sc_size_start== 0 and sc_size_end == 0) or (sc_size_start > 0 and read.reference_start >= hap_start_position) or
+                    (sc_size_end > 0 and read.reference_end <= hap_end_position))
+                        and (score > best_score)):
+                    best_score = score
+                    best_hap = hap
+                    best_start_point = start_pos_local - hap_start_position
+                    best_end_point = end_pos_local - hap_start_position
+
+        # check reference sequence as well
+        # sift clip length from the start and end of the read
+        sc_length_start = read.cigar[0][1] if read.cigar[0][0] == 4 else 0
+        sc_length_end = read.cigar[-1][1] if read.cigar[-1][0] == 4 else 0
+        del_length = sum([length for op, length in read.cigartuples if op == 2])
+
+        ref_seq = reference[read.reference_name][
+                 max(read.reference_start - sc_length_start, 0):
+                 min(read.reference_end + sc_length_end + del_length, len(reference[read.reference_name]))].seq.upper()
+        score, start_pos_local, end_pos_local = run_alignment(ref_seq,
+                                                                read_seq,
+                                                                read_start,
+                                                                sc_size_start,
+                                                                [],
+                                                                local_aligner)
+        if score > best_score:
+            best_score = score
+            best_hap = None
+            best_start_point = start_pos_local - read_start
+            best_end_point = end_pos_local - read_start
 
 
-            # only in case we overlap the breakpoint
-            # read.reference_start is the breakpoint position
-            hap_sc_size_start = 0
-            hap_sc_size_end = 0
-            if hap.cigar[0][0] == 4:
-                hap_sc_size_start = hap.cigar[0][1]
+    # in case hap direction is reverse, we need to reverse the start and end points
+    if best_hap is not None and best_hap.is_reverse:
+        best_start_point, best_end_point = max(best_hap.query_length - best_end_point + 1, 0), best_hap.query_length - best_start_point + 1
 
-            if hap.cigar[-1][0] == 4:
-                hap_sc_size_end = hap.cigar[-1][1]
-
-            hap_seq = hap.query_sequence
-            hap_start_position = hap.reference_start - hap_sc_size_start
-            hap_end_position = hap.reference_end + hap_sc_size_end
-            read_start_position = read.reference_start - sc_size_start
-            read_end_position = read.reference_end + sc_size_end
-
-
-            # local alignment
-            score, start_pos_local, end_pos_local = run_alignment(hap_seq,
-                                                                                              read_seq,
-                                                                                              hap_start_position,
-                                                                                              0,
-                                                                                              hap.cigartuples,
-                                                                                              local_aligner)
-            if((hap.query_name=="HC_chr13:30036276_1012" or hap.query_name=="HC_chr1:157309164_1024") and read.query_name =="031865_2-Z0134-0007858033"):
-                print(
-                    f"Processing haplotype {hap.query_name} Alignment score: {score} start_pos_local: {start_pos_local} end position: {end_pos_local}")
-
-            if (# overlap check
-                (read_start_position <= hap_end_position) and
-                (read_end_position >= hap_start_position) and
-                ((sc_size_start== 0 and sc_size_end == 0) or (sc_size_start > 0 and read.reference_start >= hap_start_position) or
-                (sc_size_end > 0 and read.reference_end <= hap_end_position))
-                    and (score > best_score)):
-                best_score = score
-                best_hap = hap
-                best_start_point = start_pos_local - hap_start_position
-                best_end_point = end_pos_local - hap_start_position
-        # if best_hap is not None:
-        #     print(f"Best haplotype for read {read.query_name} is {best_hap.query_name} with score {best_score} start point {best_start_point} end point {best_end_point}")
-        # else:
-        #     print(f"No haplotype found for read {read.query_name}")
-        # remove the temporary file
-        subprocess.check_call(f"rm {args.output}_temp_hap.bam", shell=True)
-        subprocess.check_call(f"rm {args.output}_temp_hap.bam.bai", shell=True)
-        # in case hap direction is reverse, we need to reverse the start and end points
-        if best_hap is not None and best_hap.is_reverse:
-            best_start_point, best_end_point = max(best_hap.query_length - best_end_point + 1, 0), best_hap.query_length - best_start_point + 1
-
-        return best_hap, best_score, best_start_point, best_end_point
+    return best_hap, best_score, best_start_point, best_end_point
 
 
 
@@ -199,63 +206,6 @@ MIN_CONTIG_LENGTH = 100000
 
 
 
-
-if(args.region is not None):
-
-    logger.info(f"Processing region {args.region}")
-    # assembly file is in CRAM format, extract the region
-    subprocess.check_call(
-        f"samtools view -b {args.assembly} {args.region} -o {args.output}_temp_assembly_{args.region}.bam",
-        shell=True)
-    subprocess.check_call(f"samtools index {args.output}_temp_assembly_{args.region}.bam", shell=True)
-    # tumor crams, extract the region
-    for i in range(len(args.tumor_crams)):
-        subprocess.check_call(
-            f"samtools view -b {args.tumor_crams[i]} {args.region} -o {args.output}_temp_tumor_{args.region}_{i}.bam",
-            shell=True)
-        subprocess.check_call(f"samtools index {args.output}_temp_tumor_{args.region}_{i}.bam", shell=True)
-        args.tumor_crams[i] = args.output + f"_temp_tumor_{args.region}_{i}.bam"
-
-    # germline crams, extract the region
-    for i in range(len(args.germline_crams)):
-        subprocess.check_call(
-            f"samtools view -b {args.germline_crams[i]} {args.region} -o {args.output}_temp_germline_{args.region}_{i}.bam",
-            shell=True)
-        subprocess.check_call(f"samtools index {args.output}_temp_germline_{args.region}_{i}.bam", shell=True)
-        args.germline_crams[i] = args.output + f"_temp_germline_{args.region}_{i}.bam"
-
-    tumor_crams = [f"{args.output}_temp_tumor_{args.region}_{i}.bam" for i in range(len(args.tumor_crams))]
-    germline_crams = [f"{args.output}_temp_germline_{args.region}_{i}.bam" for i in range(len(args.germline_crams))]
-    merged_tumor_cram = f"{args.output}_temp_merged_tumor_{args.region}.bam"
-    merged_germline_cram = f"{args.output}_temp_merged_germline_{args.region}.bam"
-    assembly = f"{args.output}_temp_assembly_{args.region}.bam"
-else:
-    tumor_crams = args.tumor_crams
-    germline_crams = args.germline_crams
-    merged_tumor_cram = f"{args.output}_temp_merged_tumor.bam"
-    merged_germline_cram = f"{args.output}_temp_merged_germline.bam"
-    assembly = args.assembly
-
-
-if len(args.tumor_crams) > 0:
-    subprocess.check_call(f"samtools merge -f {merged_tumor_cram} {' '.join([cram for cram in tumor_crams])}", shell=True)
-    subprocess.check_call(f"samtools index {merged_tumor_cram}", shell=True)
-
-subprocess.check_call(f"samtools merge -f {merged_germline_cram} {' '.join([cram for cram in germline_crams])}", shell=True)
-subprocess.check_call(f"samtools index {merged_germline_cram}", shell=True)
-
-# remove temporary files
-if(args.region is not None):
-    for i in range(len(tumor_crams)):
-        subprocess.check_call(f"rm {tumor_crams[i]}", shell=True)
-        subprocess.check_call(f"rm {tumor_crams[i]}.bai", shell=True)
-    for i in range(len(germline_crams)):
-        subprocess.check_call(f"rm {germline_crams[i]}", shell=True)
-        subprocess.check_call(f"rm {germline_crams[i]}.bai", shell=True)
-    subprocess.check_call(f"rm {assembly}", shell=True)
-    subprocess.check_call(f"rm {assembly}.bai", shell=True)
-
-
 class SupportingRead:
     def __init__(self, read_name, start_overlap, end_overlap, score, category):
         self.read_name = read_name
@@ -272,45 +222,26 @@ gap_penalty = -6
 gap_extension_penalty = -1
 
 local_aligner = create_aligner('local', match, mismatch, gap_penalty, gap_extension_penalty, 0)
-
-
+reference = pyfaidx.Fasta(args.reference, build_index=False)
 
 haps_map = dict()
+# align tumor and germline reads to haplotype
+for cram_file, category in [(cram, 0) for cram in args.tumor_crams] + [(cram, 1) for cram in args.germline_crams]:
+    with pysam.AlignmentFile(cram_file) as reads_cram:
+        for read in reads_cram.fetch() if args.region is None else reads_cram.fetch(region = args.region):
+            # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
+            if not (read.flag & 1024) and (category == 1 or any(op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or []))):
+                best_hap, best_score, start_point, end_point = find_best_haplotype(read, local_aligner, reference)
+                if best_hap is not None:
+                    if best_hap not in haps_map:
+                        haps_map[best_hap] = []
+                    # Append the SupportingRead object to the list
+                    haps_map[best_hap].append(
+                        SupportingRead(read.query_name, start_point, end_point, best_score, category))
 
-# align tumor reads to haplotype
-# if len(args.tumor_crams) > 0:
-#     with pysam.AlignmentFile(merged_tumor_cram) as reads_cram:
-#             for read in reads_cram.fetch():
-#                 #print(f"Processing read {read.query_name} {read.reference_name}:{read.reference_start}-{read.reference_end}")
-#                 best_hap, best_score, start_point, end_point = find_best_haplotype(read, local_aligner)
-#                 if best_hap is not None:
-#                     if best_hap not in haps_map:
-#                         haps_map[best_hap] = []
-#                     # Append the SupportingRead object to the list
-#                     haps_map[best_hap].append(
-#                         SupportingRead(read.query_name, start_point, end_point, best_score, 0))
-
-# align germline reads to haplotype
-with pysam.AlignmentFile(merged_germline_cram) as reads_cram:
-        for read in reads_cram.fetch():
-            #print(f"Processing read {read.query_name} {read.reference_name}:{read.reference_start}-{read.reference_end}")
-            best_hap, best_score, start_point, end_point = find_best_haplotype(read, local_aligner)
-            if best_hap is not None:
-                if best_hap not in haps_map:
-                    haps_map[best_hap] = []
-                # Append the SupportingRead object to the list
-                haps_map[best_hap].append(
-                    SupportingRead(read.query_name, start_point, end_point, best_score, 1))
-
-# remove temporary files
-if len(args.tumor_crams) > 0:
-    subprocess.check_call(f"rm {merged_tumor_cram}", shell=True)
-    subprocess.check_call(f"rm {merged_tumor_cram}.bai", shell=True)
-subprocess.check_call(f"rm {merged_germline_cram}", shell=True)
-subprocess.check_call(f"rm {merged_germline_cram}.bai", shell=True)
 
 # write the haplotypes to the output file
-#print("Writing the haplotypes to the output file")
+print("Writing the haplotypes to the output file")
 with pysam.AlignmentFile(args.assembly) as assembly:
     with pysam.AlignmentFile(args.output + "_unsorted.bam", "wb", template=assembly) as output:
         # write each haplotype as a row in the output file
