@@ -11,11 +11,29 @@ import subprocess
 from Bio import Align
 import array
 import pyfaidx
-from pysam import reference
+from joblib import Parallel, delayed
+import os
+
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__ if __name__ != "__main__" else "rematch_reads_to_haplotypes")
 
+MIN_CONTIG_LENGTH = 100000
+
+
+class SupportingRead:
+    def __init__(self, read_name, start_overlap, end_overlap, score, category):
+        self.read_name = read_name
+        self.start_overlap = start_overlap
+        self.end_overlap = end_overlap
+        self.score = score
+        self.category = category
+
+
+match = 1
+mismatch = -4
+gap_penalty = -6
+gap_extension_penalty = -1
 
 def create_aligner(mode, match, mismatch, gap_penalty, gap_extension_penalty, sc_penalty):
     """
@@ -97,11 +115,9 @@ def adjust_start_end_positions(start_pos, aligned, alignmnet_length, hap_cigar_t
 
     return start_pos + adjusted_start_pos, start_pos + adjusted_end_pos
 
-
-
-
-def find_best_haplotype(read, local_aligner, reference):
+def find_best_haplotype(assemmbly_path, read, local_aligner, category, reference):
     # in case cigar starts with soft clip, we need to adjust the haplotype start
+    affected_haps = set()
     sc_size_start = 0
     sc_size_end = 0
     if read.cigar[0][0] == 4:
@@ -124,8 +140,9 @@ def find_best_haplotype(read, local_aligner, reference):
     best_end_point = None
     read_seq = read.query_sequence
     # extract the region of the assembly that the read overlaps
-    with pysam.AlignmentFile(args.assembly, "rb") as assembly:
+    with pysam.AlignmentFile(assemmbly_path, "rb") as assembly:
         for hap in assembly.fetch(read.reference_name, read_start, read_end):
+            # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
             if not (hap.flag & 1024) and (
                     category == 1 or any(op in {1, 2, 4} and length > 20 for op, length in (hap.cigartuples or []))):
                 # only in case we overlap the breakpoint
@@ -161,6 +178,8 @@ def find_best_haplotype(read, local_aligner, reference):
                     best_start_point = start_pos_local - hap_start_position
                     best_end_point = end_pos_local - hap_start_position
 
+                    affected_haps.add((hap.query_name, hap.flag))
+
         # check reference sequence as well
         # sift clip length from the start and end of the read
         sc_length_start = read.cigar[0][1] if read.cigar[0][0] == 4 else 0
@@ -187,8 +206,82 @@ def find_best_haplotype(read, local_aligner, reference):
     if best_hap is not None and best_hap.is_reverse:
         best_start_point, best_end_point = max(best_hap.query_length - best_end_point + 1, 0), best_hap.query_length - best_start_point + 1
 
-    return best_hap, best_score, best_start_point, best_end_point
+    return best_hap, best_score, best_start_point, best_end_point, affected_haps
 
+def rematch_homopolymere(assembly, tumor_crams, germline_crams, reference_path, bed_file_regions, contig, output):
+
+    print(f"Rematching reads to haplotypes on contig: {contig}")
+    local_aligner = create_aligner('local', match, mismatch, gap_penalty, gap_extension_penalty, 0)
+    reference = pyfaidx.Fasta(reference_path, build_index=False)
+
+    haps_map = dict()
+    total_affected_haps = set()
+    # align tumor and germline reads to haplotype
+    for cram_file, category in [(cram, 0) for cram in tumor_crams] + [(cram, 1) for cram in germline_crams]:
+        with pysam.AlignmentFile(cram_file) as reads_cram:
+            with open(bed_file_regions, "r") as bed:
+                for line in bed:
+                    chrom, start, end = line.strip().split()[:3]
+                    if chrom != contig:
+                        continue
+                    start, end = int(start), int(end)
+                    for read in reads_cram.fetch(chrom, start, end):
+                        # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
+                        if not (read.flag & 1024) and (category == 1 or any(
+                                op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or []))):
+                            best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(assembly,
+                                                                                                              read,
+                                                                                                              local_aligner,
+                                                                                                              category,
+                                                                                                              reference)
+                            if best_hap is not None:
+                                if best_hap not in haps_map:
+                                    haps_map[(best_hap.query_name, best_hap.flag)] = []
+                                # Append the SupportingRead object to the list
+                                haps_map[(best_hap.query_name, best_hap.flag)].append(
+                                    SupportingRead(read.query_name, start_point, end_point, best_score, category))
+                                # update the affected haplotypes
+                                total_affected_haps.update(affected_haps)
+
+    # write the haplotypes to the output file
+    print(f"Writing the haplotypes to the output file contig: {contig}")
+    with pysam.AlignmentFile(assembly) as assembly:
+        with pysam.AlignmentFile(output + "_unsorted.bam", "wb", template=assembly) as output:
+            # write each haplotype as a row in the output file
+            # supporting reads are stored in the ef tag
+            for hap in assembly.fetch(contig):
+                if hap in haps_map:
+                    # in case the haplotype is affected and has reads supporting it
+                    supporting_reads = haps_map[(hap.query_name, hap.flag)]
+                    hap.set_tag("ef", " ".join([read.read_name for read in supporting_reads]))
+                    hap.set_tag("ez", " ".join([read.read_name for read in supporting_reads]))
+                    hap.set_tag("eq", array.array("f", [read.score for read in supporting_reads]))
+                    hap.set_tag("os", array.array("i", [read.start_overlap for read in supporting_reads]))
+                    hap.set_tag("oe", array.array("i", [read.end_overlap for read in supporting_reads]))
+                    hap.set_tag("ec", array.array("i", [read.category for read in supporting_reads]))
+                    hap.set_tag("et",
+                                array.array("b", [0 for read in supporting_reads]))  # ?? Not sure about what is et
+                    output.write(hap)
+                elif (hap.query_name, hap.flag) in total_affected_haps:
+                    # in case the haplotype is affected but no reads are supporting it
+                    hap.set_tag("ef", "")
+                    hap.set_tag("ez", "")
+                    hap.set_tag("eq", array.array("f", []))
+                    hap.set_tag("os", array.array("i", []))
+                    hap.set_tag("oe", array.array("i", []))
+                    hap.set_tag("ec", array.array("i", []))
+                    hap.set_tag("et", array.array("b", []))
+                    output.write(hap)
+                else:
+                    # in case the haplotype is not affected
+                    output.write(hap)
+
+    # index output file
+    if os.path.exists(f"{output}_unsorted.bam"):
+        subprocess.check_call(f"samtools sort {output}_unsorted.bam -o {output}", shell=True)
+        subprocess.check_call(f"samtools index {output}", shell=True)
+        # remove unsoreted file
+        subprocess.check_call(f"rm {output}_unsorted.bam", shell=True)
 
 
 
@@ -199,67 +292,41 @@ parser.add_argument('--output', required=True, help='The output assembly file wi
 parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
 parser.add_argument("--tumor_crams", help="The input tumor CRAM files", nargs='+', required=False)
 parser.add_argument("--germline_crams", help="The input germline CRAM files", nargs='+', required=True)
-parser.add_argument("--region", help="The region to process, in the format of chr<chr_num>:pos-pos", required=False)
+parser.add_argument("--bed_file_regions", help="The bed file with the regions to realign", required=True)
 args = parser.parse_args()
 
-MIN_CONTIG_LENGTH = 100000
+# rematch_homopolymere(args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, "chr1", args.output)
+with pysam.AlignmentFile(args.assembly, "rc") as assembly_file:
+    # Get the list of contig names
+    contigs = assembly_file.references
+    # Get the list of contig lengths
+    contig_lengths = assembly_file.lengths
+    large_contigs = [
+        contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
+    ]
 
+    results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
+        delayed(rematch_homopolymere)(
+            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}_sorted.bam"
+        )
+        for contig in large_contigs
+    )
 
+    # merge the contig files together
+    with pysam.AlignmentFile(args.output, mode='wb', header=assembly_file.header) as output:
+        for contig in contigs:
+            if contig in large_contigs:
+                with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
+                    for read in contig_file:
+                        output.write(read)
+            else:
+                # copy the reads from the original file in case the contig is short
+                for read in assembly_file.fetch(contig):
+                        output.write(read)
 
-class SupportingRead:
-    def __init__(self, read_name, start_overlap, end_overlap, score, category):
-        self.read_name = read_name
-        self.start_overlap = start_overlap
-        self.end_overlap = end_overlap
-        self.score = score
-        self.category = category
+        # remove the contig files
+        for contig in large_contigs:
+            os.remove(f"{args.output}{contig}_sorted.bam")
+            os.remove(f"{args.output}{contig}_sorted.bam.bai")
 
-
-
-match = 1
-mismatch = -4
-gap_penalty = -6
-gap_extension_penalty = -1
-
-local_aligner = create_aligner('local', match, mismatch, gap_penalty, gap_extension_penalty, 0)
-reference = pyfaidx.Fasta(args.reference, build_index=False)
-
-haps_map = dict()
-# align tumor and germline reads to haplotype
-for cram_file, category in [(cram, 0) for cram in args.tumor_crams] + [(cram, 1) for cram in args.germline_crams]:
-    with pysam.AlignmentFile(cram_file) as reads_cram:
-        for read in reads_cram.fetch() if args.region is None else reads_cram.fetch(region = args.region):
-            # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
-            if not (read.flag & 1024) and (category == 1 or any(op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or []))):
-                best_hap, best_score, start_point, end_point = find_best_haplotype(read, local_aligner, reference)
-                if best_hap is not None:
-                    if best_hap not in haps_map:
-                        haps_map[best_hap] = []
-                    # Append the SupportingRead object to the list
-                    haps_map[best_hap].append(
-                        SupportingRead(read.query_name, start_point, end_point, best_score, category))
-
-
-# write the haplotypes to the output file
-print("Writing the haplotypes to the output file")
-with pysam.AlignmentFile(args.assembly) as assembly:
-    with pysam.AlignmentFile(args.output + "_unsorted.bam", "wb", template=assembly) as output:
-        # write each haplotype as a row in the output file
-        # supporting reads are stored in the ef tag
-        for hap, supporting_reads in haps_map.items():
-            hap.set_tag("ef", " ".join([read.read_name for read in supporting_reads]))
-            hap.set_tag("ez", " ".join([read.read_name for read in supporting_reads]))
-
-            hap.set_tag("eq", array.array("f",[read.score for read in supporting_reads]))
-            hap.set_tag("os", array.array("i",[read.start_overlap for read in supporting_reads]))
-            hap.set_tag("oe", array.array("i",[read.end_overlap for read in supporting_reads]))
-            hap.set_tag("ec", array.array("i",[read.category for read in supporting_reads]))
-            hap.set_tag("et", array.array("b",[0 for read in supporting_reads])) # ?? Not sure about what is et
-            output.write(hap)
-
-# index output file
-subprocess.check_call(f"samtools sort {args.output}_unsorted.bam -o {args.output}", shell=True)
-subprocess.check_call(f"samtools index {args.output}", shell=True)
-
-# remove unsoreted file
-subprocess.check_call(f"rm {args.output}_unsorted.bam", shell=True)
+        pysam.index(args.output)
