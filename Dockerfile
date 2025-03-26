@@ -195,7 +195,7 @@ COPY scripts/gridss \
 	scripts/link_breakpoints.R \
 	scripts/choose_best_haplotype_realignment.py \
 	scripts/align_long_homopolymers.py \
-	scripts/rematch_reads_to_haplotype.py \
+	scripts/rematch_reads_to_haplotypes.py \
 	scripts/realigned_regions.py \
 	scripts/convert_vcf_format.R \
 	/opt/gridss/
