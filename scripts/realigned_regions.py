@@ -81,9 +81,9 @@ def process_bam_files(before_bam, after_bam, output_bed):
 
 
 parser = argparse.ArgumentParser(description="Extract realigned regions from BAM files")
-parser.add_argument("before_bam", help="Original BAM file")
-parser.add_argument("after_bam", help="Realigned BAM file")
-parser.add_argument("output_bed", help="Output BED file")
+parser.add_argument("--before_bam", help="Original BAM file")
+parser.add_argument("--after_bam", help="Realigned BAM file")
+parser.add_argument("--output_bed", help="Output BED file")
 args = parser.parse_args()
 
 process_bam_files(args.before_bam, args.after_bam, args.output_bed)
