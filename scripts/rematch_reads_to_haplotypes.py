@@ -210,7 +210,7 @@ def find_best_haplotype(assemmbly_path, read, local_aligner, category, reference
 
 def rematch_homopolymere(assembly, tumor_crams, germline_crams, reference_path, bed_file_regions, contig, output):
 
-    print(f"Rematching reads to haplotypes on contig: {contig}")
+    logger.info(f"Rematching reads to haplotypes on contig: {contig}")
     local_aligner = create_aligner('local', match, mismatch, gap_penalty, gap_extension_penalty, 0)
     reference = pyfaidx.Fasta(reference_path, build_index=False)
 
@@ -244,7 +244,7 @@ def rematch_homopolymere(assembly, tumor_crams, germline_crams, reference_path, 
                                 total_affected_haps.update(affected_haps)
 
     # write the haplotypes to the output file
-    print(f"Writing the haplotypes to the output file contig: {contig}")
+    logger.info(f"Writing the haplotypes to the output file contig: {contig}")
     with pysam.AlignmentFile(assembly) as assembly:
         with pysam.AlignmentFile(output + "_unsorted.bam", "wb", template=assembly) as output:
             # write each haplotype as a row in the output file

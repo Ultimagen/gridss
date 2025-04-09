@@ -3,6 +3,8 @@ from collections import defaultdict
 import sys
 import argparse
 
+logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__ if __name__ != "__main__" else "realigned_regions")
 
 def process_bam_files(before_bam, after_bam, output_bed):
     # Open BAM files
@@ -76,8 +78,8 @@ def process_bam_files(before_bam, after_bam, output_bed):
     before.close()
     after.close()
 
-    print(f"Merged and ordered regions saved in {output_bed}.")
-    print(f"Total changed region length: {total_length} bases.")
+    logger.info(f"Merged and ordered regions saved in {output_bed}.")
+    logger.info(f"Total changed region length: {total_length} bases.")
 
 
 parser = argparse.ArgumentParser(description="Extract realigned regions from BAM files")
