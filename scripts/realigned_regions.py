@@ -22,7 +22,7 @@ def process_bam_files(before_bam, after_bam, output_bed):
     before_dict = defaultdict(list)
     for read in before:
         key = (read.query_name, read.flag)
-        before_dict[key].append((read.reference_name, read.reference_start, read.reference_end))
+        before_dict[key].append((read.reference_name, read.reference_start, read.reference_end, read.cigartuples))
 
     # Process "after" BAM file
     for read in after:
