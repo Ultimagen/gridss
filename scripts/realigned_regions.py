@@ -2,6 +2,7 @@ import pysam
 from collections import defaultdict
 import sys
 import argparse
+import logging
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__ if __name__ != "__main__" else "realigned_regions")
