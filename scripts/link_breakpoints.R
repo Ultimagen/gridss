@@ -14,34 +14,24 @@ thisFile <- function() { # https://stackoverflow.com/questions/1815606/determine
 		return(normalizePath(sys.frames()[[1]]$ofile))
 	}
 }
-# argp = arg_parser("Link GRIDSS breakends together to create SV. In that way we have start position and end breakends of the variant and it is considered as an SV variant")
-# argp = add_argument(argp, "--ref", default="", help="Reference genome to use. Must be a valid installed BSgenome package")
-# argp = add_argument(argp, "--input", help="GRIDSS VCF")
-# argp = add_argument(argp, "--output", help="High confidence somatic subset")
-# argp = add_argument(argp, "--fulloutput", help="Full call set excluding obviously germline call.")
-# argp = add_argument(argp, "--scriptdir", default=thisFile(), help="Path to libgridss.R script")
-# argp = add_argument(argp, "--configdir", default=".", help="Path to gridss.config.R script relative to scriptdir. Defaults to '.' (same directory as libgridss.R)")
-# argp = add_argument(argp, "--gc", flag=TRUE, help="Perform garbage collection after freeing of large objects. ")
-# argv = parse_args(argp)
+argp = arg_parser("Link GRIDSS breakends together to create SV. In that way we have start position and end breakends of the variant and it is considered as an SV variant")
+argp = add_argument(argp, "--ref", default="", help="Reference genome to use. Must be a valid installed BSgenome package")
+argp = add_argument(argp, "--input", help="GRIDSS VCF")
+argp = add_argument(argp, "--output", help="High confidence somatic subset")
+argp = add_argument(argp, "--fulloutput", help="Full call set excluding obviously germline call.")
+argp = add_argument(argp, "--scriptdir", default=thisFile(), help="Path to libgridss.R script")
+argp = add_argument(argp, "--configdir", default=".", help="Path to gridss.config.R script relative to scriptdir. Defaults to '.' (same directory as libgridss.R)")
+argp = add_argument(argp, "--gc", flag=TRUE, help="Perform garbage collection after freeing of large objects. ")
+argv = parse_args(argp)
 
-argv <- list(
-  ref = "BSgenome.Hsapiens.UCSC.hg38",
-  input = "/Users/mayalevy/Downloads/check_link_germline/410396_411037_410894_4102321624638-Z0091.ann.vcf",
-  fulloutput = "/Users/mayalevy/Downloads/check_link_germline/somatic_highconf.vcf",
-  scriptdir = "/Users/mayalevy/PycharmProjects/gridss/scripts",
-  configdir = ".",
-  gc = TRUE
-)
-
-
-# for (argname in c("input")) {
-# 	if (is.na(argv[argname]) || is.null(argv[argname])) {
-# 		msg = paste0("Required argument missing: --", argname)
-# 		write(msg, stderr())
-# 		print(argp)
-# 		stop(msg)
-# 	}
-# }
+for (argname in c("input")) {
+	if (is.na(argv[argname]) || is.null(argv[argname])) {
+		msg = paste0("Required argument missing: --", argname)
+		write(msg, stderr())
+		print(argp)
+		stop(msg)
+	}
+}
 if (is.na(argv$input) || is.null(argv$input) || !file.exists(argv$input)) {
   msg = paste(argv$input, "not found")
   write(msg, stderr())
