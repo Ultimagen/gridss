@@ -115,7 +115,7 @@ def adjust_start_end_positions(start_pos, aligned, alignmnet_length, hap_cigar_t
 
     return start_pos + adjusted_start_pos, start_pos + adjusted_end_pos
 
-def find_best_haplotype(assemmbly_path, read, local_aligner, category, reference):
+def find_best_haplotype(region_haps, read, local_aligner, reference):
     # in case cigar starts with soft clip, we need to adjust the haplotype start
     affected_haps = set()
     sc_size_start = 0
@@ -140,45 +140,41 @@ def find_best_haplotype(assemmbly_path, read, local_aligner, category, reference
     best_end_point = None
     read_seq = read.query_sequence
     # extract the region of the assembly that the read overlaps
-    with pysam.AlignmentFile(assemmbly_path, "rb") as assembly:
-        for hap in assembly.fetch(read.reference_name, read_start, read_end):
-            # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
-            if not (hap.flag & 1024) and (
-                    category == 1 or any(op in {1, 2, 4} and length > 20 for op, length in (hap.cigartuples or []))):
-                # only in case we overlap the breakpoint
-                # read.reference_start is the breakpoint position
-                hap_sc_size_start = 0
-                hap_sc_size_end = 0
-                if hap.cigar[0][0] == 4:
-                    hap_sc_size_start = hap.cigar[0][1]
+    for hap in region_haps:
+        # only in case we overlap the breakpoint
+        # read.reference_start is the breakpoint position
+        hap_sc_size_start = 0
+        hap_sc_size_end = 0
+        if hap.cigar[0][0] == 4:
+            hap_sc_size_start = hap.cigar[0][1]
 
-                if hap.cigar[-1][0] == 4:
-                    hap_sc_size_end = hap.cigar[-1][1]
+        if hap.cigar[-1][0] == 4:
+            hap_sc_size_end = hap.cigar[-1][1]
 
-                hap_seq = hap.query_sequence
-                hap_start_position = hap.reference_start - hap_sc_size_start
-                hap_end_position = hap.reference_end + hap_sc_size_end
-                read_start_position = read.reference_start - sc_size_start
-                read_end_position = read.reference_end + sc_size_end
-                # local alignment
-                score, start_pos_local, end_pos_local = run_alignment(hap_seq,
-                                                                      read_seq,
-                                                                      hap_start_position,
-                                                                      0,
-                                                                      hap.cigartuples,
-                                                                      local_aligner)
-                if (# overlap check
-                    (read_start_position <= hap_end_position) and
-                    (read_end_position >= hap_start_position) and
-                    ((sc_size_start== 0 and sc_size_end == 0) or (sc_size_start > 0 and read.reference_start >= hap_start_position) or
-                    (sc_size_end > 0 and read.reference_end <= hap_end_position))
-                        and (score > best_score)):
-                    best_score = score
-                    best_hap = hap
-                    best_start_point = start_pos_local - hap_start_position
-                    best_end_point = end_pos_local - hap_start_position
+        hap_seq = hap.query_sequence
+        hap_start_position = hap.reference_start - hap_sc_size_start
+        hap_end_position = hap.reference_end + hap_sc_size_end
+        read_start_position = read.reference_start - sc_size_start
+        read_end_position = read.reference_end + sc_size_end
+        # check if the read overlaps with the haplotype
+        if((read_start_position <= hap_end_position) and
+            (read_end_position >= hap_start_position) and
+            ((sc_size_start== 0 and sc_size_end == 0) or (sc_size_start > 0 and read.reference_start >= hap_start_position) or
+            (sc_size_end > 0 and read.reference_end <= hap_end_position))):
+            # run local alignment
+            score, start_pos_local, end_pos_local = run_alignment(hap_seq,
+                                                                  read_seq,
+                                                                  hap_start_position,
+                                                                  0,
+                                                                  hap.cigartuples,
+                                                                  local_aligner)
+            if (score > best_score):
+                best_score = score
+                best_hap = hap
+                best_start_point = start_pos_local - hap_start_position
+                best_end_point = end_pos_local - hap_start_position
 
-                    affected_haps.add((hap.query_name, hap.flag))
+                affected_haps.add((hap.query_name, hap.flag))
 
         # check reference sequence as well
         # sift clip length from the start and end of the read
@@ -208,7 +204,7 @@ def find_best_haplotype(assemmbly_path, read, local_aligner, category, reference
 
     return best_hap, best_score, best_start_point, best_end_point, affected_haps
 
-def rematch_homopolymere(assembly, tumor_crams, germline_crams, reference_path, bed_file_regions, contig, output):
+def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_path, bed_file_regions, contig, output):
 
     logger.info(f"Rematching reads to haplotypes on contig: {contig}")
     local_aligner = create_aligner('local', match, mismatch, gap_penalty, gap_extension_penalty, 0)
@@ -217,35 +213,46 @@ def rematch_homopolymere(assembly, tumor_crams, germline_crams, reference_path, 
     haps_map = dict()
     total_affected_haps = set()
     # align tumor and germline reads to haplotype
+    logger.debug("Aligning reads to haplotypes")
     for cram_file, category in [(cram, 0) for cram in tumor_crams] + [(cram, 1) for cram in germline_crams]:
+        logger.debug(f"Processing {cram_file} with category {category}")
         with pysam.AlignmentFile(cram_file) as reads_cram:
             with open(bed_file_regions, "r") as bed:
                 for line in bed:
+                    logger.debug(f"Processing line: {line.strip()}")
                     chrom, start, end = line.strip().split()[:3]
                     if chrom != contig:
                         continue
                     start, end = int(start), int(end)
-                    for read in reads_cram.fetch(chrom, start, end):
-                        # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
-                        if not (read.flag & 1024) and (category == 1 or any(
-                                op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or []))):
-                            best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(assembly,
-                                                                                                              read,
-                                                                                                              local_aligner,
-                                                                                                              category,
-                                                                                                              reference)
-                            if best_hap is not None:
-                                if best_hap not in haps_map:
-                                    haps_map[(best_hap.query_name, best_hap.flag)] = []
-                                # Append the SupportingRead object to the list
-                                haps_map[(best_hap.query_name, best_hap.flag)].append(
-                                    SupportingRead(read.query_name, start_point, end_point, best_score, category))
-                                # update the affected haplotypes
-                                total_affected_haps.update(affected_haps)
+                    # fetch the haplotypes in the region
+                    with pysam.AlignmentFile(assembly_path, "rb") as assembly:
+                        region_haps = [
+                            hap for hap in list(assembly.fetch(chrom, start, end))
+                            if any(op in {1, 2, 4} and length > 20 for op, length in (hap.cigartuples or []))
+                        ]
+                        for read in reads_cram.fetch(chrom, start, end):
+                            # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
+                            if (not read.is_duplicate) and (category == 1 or any(
+                                    op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or []))):
+                                logger.debug(f"Processing read: {read.query_name} with cigartuples {read.cigartuples} ")
+                                best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(region_haps,
+                                                                                                                  read,
+                                                                                                                  local_aligner,
+                                                                                                                  reference)
+                                if best_hap is not None:
+                                    if best_hap not in haps_map:
+                                        haps_map[(best_hap.query_name, best_hap.flag)] = []
+                                    # Append the SupportingRead object to the list
+                                    haps_map[(best_hap.query_name, best_hap.flag)].append(
+                                        SupportingRead(read.query_name, start_point, end_point, best_score, category))
+                                    # update the affected haplotypes
+                                    total_affected_haps.update(affected_haps)
+                                    logger.debug(f"Found best haplotype: {best_hap.query_name} with score {best_score} and start/end points {start_point}/{end_point}")
+
 
     # write the haplotypes to the output file
     logger.info(f"Writing the haplotypes to the output file contig: {contig}")
-    with pysam.AlignmentFile(assembly) as assembly:
+    with pysam.AlignmentFile(assembly_path) as assembly:
         with pysam.AlignmentFile(output + "_unsorted.bam", "wb", template=assembly) as output:
             # write each haplotype as a row in the output file
             # supporting reads are stored in the ef tag
