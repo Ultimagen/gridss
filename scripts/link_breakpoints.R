@@ -57,6 +57,7 @@ if (file.exists(libgridssfile)) {
 } else {
   msg = paste("Could not find libgridss.R in", argv$scriptdir, " - please specify a --scriptdir path to a directory containing the required scripts")
   write(msg, stderr())
+  print(argp)
   stop(msg)
 }
 refgenome = NULL
