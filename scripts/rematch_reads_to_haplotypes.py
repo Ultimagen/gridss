@@ -54,7 +54,7 @@ def create_aligner(mode, match, mismatch, gap_penalty, gap_extension_penalty, sc
 
     return aligner
 
-def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner):
+def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, match_score_only = False):
     """
     Perform the alignment between two sequences
     @param fa_seq: The reference sequence
@@ -67,8 +67,13 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner):
     # Perform the alignment between two sequences
     if len(fa_seq) == 0 or len(sequence) == 0:
         return 0, 0, 0
-    for alignment in aligner.align(fa_seq, sequence):
-        # Print each alignment's score and the alignment itself
+
+    if match_score_only:
+        return next(aligner.align(fa_seq, sequence)).score, 0, 0
+    else:
+        # Print alignment's score and the alignment itself
+        alignment = next(aligner.align(fa_seq, sequence))
+
         start_pos_adjust, end_pos_adjust = adjust_start_end_positions(start_pos - sc_length, alignment.aligned, alignment.length, hap_cigar)
 
         return alignment.score, start_pos_adjust, end_pos_adjust
@@ -139,6 +144,8 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
     best_start_point = None
     best_end_point = None
     read_seq = read.query_sequence
+    best_hap_start_position = None
+    best_hap_seq = None
     # extract the region of the assembly that the read overlaps
     for hap in region_haps:
         # only in case we overlap the breakpoint
@@ -156,46 +163,61 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
         hap_end_position = hap.reference_end + hap_sc_size_end
         read_start_position = read.reference_start - sc_size_start
         read_end_position = read.reference_end + sc_size_end
-        # check if the read overlaps with the haplotype
+        # local alignment
         if((read_start_position <= hap_end_position) and
             (read_end_position >= hap_start_position) and
             ((sc_size_start== 0 and sc_size_end == 0) or (sc_size_start > 0 and read.reference_start >= hap_start_position) or
             (sc_size_end > 0 and read.reference_end <= hap_end_position))):
-            # run local alignment
-            score, start_pos_local, end_pos_local = run_alignment(hap_seq,
-                                                                  read_seq,
-                                                                  hap_start_position,
-                                                                  0,
-                                                                  hap.cigartuples,
-                                                                  local_aligner)
-            if (score > best_score):
+
+            score, _, _ = run_alignment(hap_seq,
+                                          read_seq,
+                                          hap_start_position,
+                                          0,
+                                          hap.cigartuples,
+                                          local_aligner,
+                                          True)
+            if score > best_score:
                 best_score = score
                 best_hap = hap
-                best_start_point = start_pos_local - hap_start_position
-                best_end_point = end_pos_local - hap_start_position
+                best_hap_seq = hap_seq
+                best_hap_start_position = hap_start_position
 
                 affected_haps.add((hap.query_name, hap.flag))
 
-        # check reference sequence as well
-        # sift clip length from the start and end of the read
-        sc_length_start = read.cigar[0][1] if read.cigar[0][0] == 4 else 0
-        sc_length_end = read.cigar[-1][1] if read.cigar[-1][0] == 4 else 0
-        del_length = sum([length for op, length in read.cigartuples if op == 2])
+    # check reference sequence as well
+    # sift clip length from the start and end of the read
+    sc_length_start = read.cigar[0][1] if read.cigar[0][0] == 4 else 0
+    sc_length_end = read.cigar[-1][1] if read.cigar[-1][0] == 4 else 0
+    del_length = sum([length for op, length in read.cigartuples if op == 2])
 
-        ref_seq = reference[read.reference_name][
-                 max(read.reference_start - sc_length_start, 0):
-                 min(read.reference_end + sc_length_end + del_length, len(reference[read.reference_name]))].seq.upper()
-        score, start_pos_local, end_pos_local = run_alignment(ref_seq,
-                                                                read_seq,
-                                                                read_start,
-                                                                sc_size_start,
-                                                                [],
-                                                                local_aligner)
-        if score > best_score:
-            best_score = score
-            best_hap = None
-            best_start_point = start_pos_local - read_start
-            best_end_point = end_pos_local - read_start
+    ref_seq = reference[read.reference_name][
+             max(read.reference_start - sc_length_start, 0):
+             min(read.reference_end + sc_length_end + del_length, len(reference[read.reference_name]))].seq.upper()
+    ref_score, start_pos_local, end_pos_local = run_alignment(ref_seq,
+                                                            read_seq,
+                                                            read_start,
+                                                            sc_size_start,
+                                                            [],
+                                                            local_aligner,
+                                                              False)
+    if ref_score > best_score:
+        best_score = ref_score
+        best_hap = None
+        best_start_point = start_pos_local - read_start
+        best_end_point = end_pos_local - read_start
+    else:
+        # Rerun best haplotype alignment with the best score
+        score, start_pos_local, end_pos_local = run_alignment(best_hap_seq,
+                                      read_seq,
+                                      best_hap_start_position,
+                                      0,
+                                      best_hap.cigartuples,
+                                      local_aligner,
+                                       False)
+
+        best_hap = hap
+        best_start_point = start_pos_local - best_hap_start_position
+        best_end_point = end_pos_local - best_hap_start_position
 
 
     # in case hap direction is reverse, we need to reverse the start and end points
