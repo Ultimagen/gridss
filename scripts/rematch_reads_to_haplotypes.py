@@ -254,8 +254,8 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
                         ]
                         for read in reads_cram.fetch(chrom, start, end):
                             # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
-                            if (not read.is_duplicate) and (category == 1 or any(
-                                    op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or []))):
+                            if (not read.is_duplicate) and any(
+                                    op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or [])):
                                 logger.debug(f"Processing read: {read.query_name} with cigartuples {read.cigartuples} ")
                                 best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(region_haps,
                                                                                                                   read,
