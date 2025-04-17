@@ -1328,7 +1328,13 @@ get_partner_anchor_sequence = function(gr, anchor_length, bsgenome) {
     strand=ifelse(strand(partnergr)=="+", "-", "+"))
 
   in_ref_bp = in_ref[isbp]  # filter in_ref for breakpoint positions
-  valid_coords = start(anchor_gr) >= 1 & end(anchor_gr) <= seqlengths(bsgenome)[as.character(seqnames(anchor_gr))]
+  ref_lengths <- seqlengths(bsgenome)[ as.character(seqnames(anchor_gr)) ]
+  
+  # valid_coords is TRUE only when ref_lengths is not NA and the range lies within [1, ref_length]
+  valid_coords <- 
+    !is.na(ref_lengths) &
+    start(anchor_gr) >= 1 &
+    end(anchor_gr)   <= ref_lengths
   valid = as.logical(in_ref_bp) & as.logical(valid_coords)
   valid_idx = which(isbp)[valid]  # map back to original index
   
