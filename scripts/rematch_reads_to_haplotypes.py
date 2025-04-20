@@ -336,7 +336,7 @@ with pysam.AlignmentFile(args.assembly, "rc") as assembly_file:
 
     results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
         delayed(rematch_homopolymere)(
-            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}_sorted.bam"
+            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}"
         )
         for contig in large_contigs
     )
