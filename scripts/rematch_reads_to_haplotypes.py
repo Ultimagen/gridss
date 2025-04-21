@@ -108,7 +108,7 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
         return alignment.score, start_pos_adjust, end_pos_adjust
     return 0, 0, 0
 
-def adjust_start_end_positions(start_pos, aligned, alignmnet_length, hap_cigar_tuples):
+def adjust_start_end_positions(start_pos, t_gap, alignmnet_length, hap_cigar_tuples):
     """
         Convert the aligned segments in biopython format to a CIGAR farmat.
     """
