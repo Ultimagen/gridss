@@ -13,6 +13,7 @@ import array
 import pyfaidx
 from joblib import Parallel, delayed
 import os
+import parasail
 
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
@@ -34,6 +35,22 @@ match = 1
 mismatch = -4
 gap_penalty = -6
 gap_extension_penalty = -1
+
+matrix = parasail.matrix_create("ACGT", match, mismatch)
+
+def align_parasail_local(seq1, seq2):
+    """
+    Perform a Smith–Waterman (local) alignment with affine gaps.
+    Returns a TraceResult object with .score, .cigar, .end_query, .end_ref, etc.
+    """
+    # sw_trace_striped_16 does 16‑bit SIMD traces; you can also use sw_trace_scan_16
+    res = parasail.sw_striped_16(
+        seq1, seq2,
+        abs(gap_penalty),  # Parasail expects positive open/extend values
+        abs(gap_extension_penalty),
+        matrix
+    )
+    return res
 
 def create_aligner(mode, match, mismatch, gap_penalty, gap_extension_penalty, sc_penalty):
     """
@@ -62,6 +79,8 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
     @param start_pos: The start position of the read
     @param sc_length: The length of soft clipping
     @param aligner: The alignment object
+    @param hap_cigar: The CIGAR string of the haplotype
+    @param match_score_only: If True, return only the match score, for running faster
     @return: The alignment score, CIGAR string, start position, and query start position
     """
     # Perform the alignment between two sequences
@@ -69,7 +88,8 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
         return 0, 0, 0
 
     if match_score_only:
-        return next(aligner.align(fa_seq, sequence)).score, 0, 0
+        #return next(aligner.align(fa_seq, sequence)).score, 0, 0
+        return align_parasail_local(fa_seq, sequence).score, 0, 0
     else:
         # Print alignment's score and the alignment itself
         alignment = next(aligner.align(fa_seq, sequence))
@@ -216,8 +236,8 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
                                        False)
 
         best_hap = hap
-        best_start_point = start_pos_local - best_hap_start_position
-        best_end_point = end_pos_local - best_hap_start_position
+        best_start_point = start_pos_local - read_start
+        best_end_point = end_pos_local - read_start
 
 
     # in case hap direction is reverse, we need to reverse the start and end points
@@ -254,8 +274,8 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
                         ]
                         for read in reads_cram.fetch(chrom, start, end):
                             # Exclude PCR/optical duplicates, keep only tumor reads with long insertions, deletions, or soft-clips
-                            if (not read.is_duplicate) and any(
-                                    op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or [])):
+                            if (not read.is_duplicate) and (category == 1 or any(
+                                    op in {1, 2, 4} and length > 20 for op, length in (read.cigartuples or []))):
                                 logger.debug(f"Processing read: {read.query_name} with cigartuples {read.cigartuples} ")
                                 best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(region_haps,
                                                                                                                   read,
@@ -336,7 +356,7 @@ with pysam.AlignmentFile(args.assembly, "rc") as assembly_file:
 
     results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
         delayed(rematch_homopolymere)(
-            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}"
+            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}_sorted.bam"
         )
         for contig in large_contigs
     )
