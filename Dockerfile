@@ -27,6 +27,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 	&& pip3 install biopython==1.83 \
 	&& pip3 install pyfaidx==0.8.1.1 \
 	&& pip3 install joblib==1.4.0 \
+	&& pip3 install parasail==1.3.4 \
 	&& ln -s /usr/bin/python3 /usr/bin/python
 
 # compile gridsstools
