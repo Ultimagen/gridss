@@ -38,19 +38,28 @@ gap_extension_penalty = -1
 
 matrix = parasail.matrix_create("ACGT", match, mismatch)
 
-def align_parasail_local(seq1, seq2):
+def align_parasail_local(seq1, seq2, match_score_only):
     """
     Perform a Smith–Waterman (local) alignment with affine gaps.
     Returns a TraceResult object with .score, .cigar, .end_query, .end_ref, etc.
     """
     # sw_trace_striped_16 does 16‑bit SIMD traces; you can also use sw_trace_scan_16
-    res = parasail.sw_striped_16(
-        seq1, seq2,
-        abs(gap_penalty),  # Parasail expects positive open/extend values
-        abs(gap_extension_penalty),
-        matrix
-    )
-    return res
+    if match_score_only:
+        res = parasail.sw_striped_16(
+            seq1, seq2,
+            abs(gap_penalty),  # Parasail expects positive open/extend values
+            abs(gap_extension_penalty),
+            matrix
+        )
+        return res
+    else:
+        res = parasail.sw_trace_striped_16(
+            seq1, seq2,
+            abs(gap_penalty),  # Parasail expects positive open/extend values
+            abs(gap_extension_penalty),
+            matrix
+        )
+        return res
 
 def create_aligner(mode, match, mismatch, gap_penalty, gap_extension_penalty, sc_penalty):
     """
@@ -89,13 +98,13 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
 
     if match_score_only:
         #return next(aligner.align(fa_seq, sequence)).score, 0, 0
-        return align_parasail_local(fa_seq, sequence).score, 0, 0
+        return align_parasail_local(fa_seq, sequence, match_score_only).score, 0, 0
     else:
         # Print alignment's score and the alignment itself
-        alignment = next(aligner.align(fa_seq, sequence))
+        #alignment_orig = next(aligner.align(fa_seq, sequence))
+        alignment = align_parasail_local(fa_seq, sequence, match_score_only)
 
-        start_pos_adjust, end_pos_adjust = adjust_start_end_positions(start_pos - sc_length, alignment.aligned, alignment.length, hap_cigar)
-
+        start_pos_adjust, end_pos_adjust = adjust_start_end_positions(start_pos - sc_length, alignment.cigar.beg_query, len(alignment.traceback.ref), hap_cigar)
         return alignment.score, start_pos_adjust, end_pos_adjust
     return 0, 0, 0
 
@@ -103,14 +112,8 @@ def adjust_start_end_positions(start_pos, aligned, alignmnet_length, hap_cigar_t
     """
         Convert the aligned segments in biopython format to a CIGAR farmat.
     """
-    target_aligned, query_aligned = aligned
     adjusted_start_pos = 0  # This will store the adjusted start position based on initial target insertions
 
-    if aligned.size == 0:
-        return start_pos + adjusted_start_pos, start_pos + adjusted_start_pos
-
-
-    t_gap = target_aligned[0][0]
     if t_gap > 0:
         adjusted_start_pos = t_gap
 
@@ -356,7 +359,7 @@ with pysam.AlignmentFile(args.assembly, "rc") as assembly_file:
 
     results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
         delayed(rematch_homopolymere)(
-            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}_sorted.bam"
+            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}"
         )
         for contig in large_contigs
     )
