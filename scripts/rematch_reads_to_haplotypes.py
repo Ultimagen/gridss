@@ -249,7 +249,7 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
 
     return best_hap, best_score, best_start_point, best_end_point, affected_haps
 
-def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_path, bed_file_regions, contig, output):
+def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_path, bed_file_regions, contig, output_path):
 
     logger.info(f"Rematching reads to haplotypes on contig: {contig}")
     local_aligner = create_aligner('local', match, mismatch, gap_penalty, gap_extension_penalty, 0)
@@ -298,7 +298,7 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
     # write the haplotypes to the output file
     logger.info(f"Writing the haplotypes to the output file contig: {contig}")
     with pysam.AlignmentFile(assembly_path) as assembly:
-        with pysam.AlignmentFile(output + "_unsorted.bam", "wb", template=assembly) as output:
+        with pysam.AlignmentFile(output_path + "_unsorted.bam", "wb", template=assembly) as output:
             # write each haplotype as a row in the output file
             # supporting reads are stored in the ef tag
             for hap in assembly.fetch(contig):
@@ -329,11 +329,11 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
                     output.write(hap)
 
     # index output file
-    if os.path.exists(f"{output}_unsorted.bam"):
-        subprocess.check_call(f"samtools sort {output}_unsorted.bam -o {output}", shell=True)
-        subprocess.check_call(f"samtools index {output}", shell=True)
+    if os.path.exists(f"{output_path}_unsorted.bam"):
+        subprocess.check_call(f"samtools sort {output_path}_unsorted.bam -o {output_path}", shell=True)
+        subprocess.check_call(f"samtools index {output_path}", shell=True)
         # remove unsoreted file
-        subprocess.check_call(f"rm {output}_unsorted.bam", shell=True)
+        subprocess.check_call(f"rm {output_path}_unsorted.bam", shell=True)
 
 
 
