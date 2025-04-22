@@ -359,7 +359,7 @@ with pysam.AlignmentFile(args.assembly, "rc") as assembly_file:
 
     results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
         delayed(rematch_homopolymere)(
-            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}"
+            args.assembly, args.tumor_crams, args.germline_crams, args.reference, args.bed_file_regions, contig, f"{args.output}{contig}.bam"
         )
         for contig in large_contigs
     )
@@ -368,7 +368,7 @@ with pysam.AlignmentFile(args.assembly, "rc") as assembly_file:
     with pysam.AlignmentFile(args.output, mode='wb', header=assembly_file.header) as output:
         for contig in contigs:
             if contig in large_contigs:
-                with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
+                with pysam.AlignmentFile(f"{args.output}{contig}.bam") as contig_file:
                     for read in contig_file:
                         output.write(read)
             else:
@@ -378,7 +378,7 @@ with pysam.AlignmentFile(args.assembly, "rc") as assembly_file:
 
         # remove the contig files
         for contig in large_contigs:
-            os.remove(f"{args.output}{contig}_sorted.bam")
-            os.remove(f"{args.output}{contig}_sorted.bam.bai")
+            os.remove(f"{args.output}{contig}.bam")
+            os.remove(f"{args.output}{contig}.bam.bai")
 
         pysam.index(args.output)
