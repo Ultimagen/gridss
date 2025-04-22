@@ -316,14 +316,7 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
                     output.write(hap)
                 elif (hap.query_name, hap.flag) in total_affected_haps:
                     # in case the haplotype is affected but no reads are supporting it
-                    hap.set_tag("ef", "")
-                    hap.set_tag("ez", "")
-                    hap.set_tag("eq", array.array("f", []))
-                    hap.set_tag("os", array.array("i", []))
-                    hap.set_tag("oe", array.array("i", []))
-                    hap.set_tag("ec", array.array("i", []))
-                    hap.set_tag("et", array.array("b", []))
-                    output.write(hap)
+                    continue
                 else:
                     # in case the haplotype is not affected
                     output.write(hap)
