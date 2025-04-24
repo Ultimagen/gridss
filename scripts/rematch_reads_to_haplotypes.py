@@ -259,7 +259,7 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
     total_affected_haps = set()
     # align tumor and germline reads to haplotype
     logger.debug("Aligning reads to haplotypes")
-    for cram_file, category in [(cram, 0) for cram in tumor_crams] + [(cram, 1) for cram in germline_crams]:
+    for cram_file, category in [(cram, 0) for cram in (tumor_crams or [])] + [(cram, 1) for cram in (germline_crams or [])]:
         logger.debug(f"Processing {cram_file} with category {category}")
         with pysam.AlignmentFile(cram_file) as reads_cram:
             with open(bed_file_regions, "r") as bed:
