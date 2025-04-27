@@ -302,7 +302,7 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
             # write each haplotype as a row in the output file
             # supporting reads are stored in the ef tag
             for hap in assembly.fetch(contig):
-                if hap in haps_map:
+                if (hap.query_name, hap.flag) in haps_map:
                     # in case the haplotype is affected and has reads supporting it
                     supporting_reads = haps_map[(hap.query_name, hap.flag)]
                     hap.set_tag("ef", " ".join([read.read_name for read in supporting_reads]))
