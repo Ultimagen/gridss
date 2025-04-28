@@ -239,8 +239,8 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
                                        False)
 
         best_hap = hap
-        best_start_point = start_pos_local - read_start
-        best_end_point = end_pos_local - read_start
+        best_start_point = start_pos_local - best_hap_start_position
+        best_end_point = end_pos_local - best_hap_start_position
 
 
     # in case hap direction is reverse, we need to reverse the start and end points
