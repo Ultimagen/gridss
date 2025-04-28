@@ -156,10 +156,7 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
 
     # in case cigar ends with soft clip, we need to adjust the haplotype end
     if read.cigar[-1][0] == 4:
-        read_end = read.reference_end + read.cigar[-1][1]
         sc_size_end = read.cigar[-1][1]
-    else:
-        read_end = read.reference_end
 
     # find the best alignment
     best_score = -np.inf
@@ -168,7 +165,11 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
     best_end_point = None
     read_seq = read.query_sequence
     best_hap_start_position = None
+    best_hap_end_position = None
     best_hap_seq = None
+
+    read_start_position = read.reference_start - sc_size_start
+    read_end_position = read.reference_end + sc_size_end
     # extract the region of the assembly that the read overlaps
     for hap in region_haps:
         # only in case we overlap the breakpoint
@@ -184,8 +185,7 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
         hap_seq = hap.query_sequence
         hap_start_position = hap.reference_start - hap_sc_size_start
         hap_end_position = hap.reference_end + hap_sc_size_end
-        read_start_position = read.reference_start - sc_size_start
-        read_end_position = read.reference_end + sc_size_end
+
         # local alignment
         if((read_start_position <= hap_end_position) and
             (read_end_position >= hap_start_position) and
@@ -216,18 +216,16 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
     ref_seq = reference[read.reference_name][
              max(read.reference_start - sc_length_start, 0):
              min(read.reference_end + sc_length_end + del_length, len(reference[read.reference_name]))].seq.upper()
-    ref_score, start_pos_local, end_pos_local = run_alignment(ref_seq,
-                                                            read_seq,
-                                                            read_start,
-                                                            sc_size_start,
-                                                            [],
-                                                            local_aligner,
-                                                              False)
+    ref_score, _, _ = run_alignment(ref_seq,
+                                    read_seq,
+                                    read_start,
+                                    0,
+                                    [],
+                                    local_aligner,
+                                      True)
     if ref_score > best_score:
         best_score = ref_score
         best_hap = None
-        best_start_point = start_pos_local - read_start
-        best_end_point = end_pos_local - read_start
     else:
         # Rerun best haplotype alignment with the best score
         score, start_pos_local, end_pos_local = run_alignment(best_hap_seq,
@@ -238,7 +236,6 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
                                       local_aligner,
                                        False)
 
-        best_hap = hap
         best_start_point = start_pos_local - best_hap_start_position
         best_end_point = end_pos_local - best_hap_start_position
 
