@@ -209,7 +209,7 @@ def run():
                 if args.overwrite_mapq is not None and args.overwrite_mapq[0] == best_mapping_idx:
                     if rec.mapping_quality >= args.overwrite_mapq[1] and rec.mapping_quality < args.overwrite_mapq[2]:
                         rec.mapping_quality = args.overwrite_mapq[2]
-                    output.write(rec)
+                output.write(rec)
             counters[best_mapping_idx] += 1
     for i in range(len(args.alignment_sources)):
         logger.info(f"Wrote {counters[i]} alignments from {args.alignment_sources[i]} to {args.output}")
