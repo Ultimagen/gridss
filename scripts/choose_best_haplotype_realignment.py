@@ -11,7 +11,7 @@ def comma_sep(x):
     return (xsp[0],xsp[1],xsp[2])
 def parse_args():
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description='Merge haplotype alignments from multiple sources')
+    parser = argparse.ArgumentParser(description='Merge haplotype alignments from multiple sources. The input BAMs have to be queryname sorted')
     parser.add_argument('--alignment_source', required=True, type=str, action='append', help='Alignment sources (specify multiple times)')
     parser.add_argument('--output', required=True, type=str,help='The output realigned file')
     parser.add_argument('--min_mapping_quality', type=int, default=60, help='Supplementary alignments with mapping quality below this threshold will be considered poor')
@@ -201,7 +201,7 @@ def run():
     counters = np.zeros(len(args.alignment_sources))
     with pysam.AlignmentFile(args.output, "wb", template=pysam.AlignmentFile(args.alignment_sources[0])) as output:
         for alns in tqdm.tqdm(mappings):
-            assert [x[0] for x in alns] == [alns[0][0]] * len(alns), "Read names are not equal"
+            assert [x[0] for x in alns] == [alns[0][0]] * len(alns), "Read names are not equal. The BAMs should contain same reads in the same order"
             alignments = [list(x[1]) for x in alns]
             best_mapping_idx = find_best_mapping_index(alignments, args.min_mapping_quality, args.tie_breaker_idx)
             best_alignments = alignments[best_mapping_idx]
