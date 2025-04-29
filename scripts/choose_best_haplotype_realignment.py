@@ -31,9 +31,12 @@ class MappingKey:
         self.mapq = rec.mapping_quality
         self.is_supplementary = rec.is_supplementary
         self.sa_tag = None
+        self._rec = rec
         if rec.has_tag('SA'):
             self.sa_tag = rec.get_tag('SA')
 
+    def to_rec(self):
+        return self._rec
     def poor_sa(self, mq_threshold) -> bool:
         if self.sa_tag is not None and 'decoy' in self.sa_tag:
             return True
@@ -209,7 +212,7 @@ def run():
                 if args.overwrite_mapq is not None and args.overwrite_mapq[0] == best_mapping_idx:
                     if rec.mapping_quality >= args.overwrite_mapq[1] and rec.mapping_quality < args.overwrite_mapq[2]:
                         rec.mapping_quality = args.overwrite_mapq[2]
-                output.write(rec)
+                output.write(rec.to_rec())
             counters[best_mapping_idx] += 1
     for i in range(len(args.alignment_sources)):
         logger.info(f"Wrote {counters[i]} alignments from {args.alignment_sources[i]} to {args.output}")
