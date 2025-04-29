@@ -1326,7 +1326,19 @@ get_partner_anchor_sequence = function(gr, anchor_length, bsgenome) {
     start=ifelse(strand(partnergr)=="+", start(partnergr) - anchor_length[isbp] + 1, start(partnergr)),
     end=ifelse(strand(partnergr)=="+", end(partnergr), end(partnergr) + anchor_length[isbp] - 1)),
     strand=ifelse(strand(partnergr)=="+", "-", "+"))
-  seq[isbp & as.logical(in_ref)] = getSeq(bsgenome, anchor_gr[seqnames(anchor_gr) %in% seqnames(bsgenome)], as.character=TRUE)
+
+  in_ref_bp = in_ref[isbp]  # filter in_ref for breakpoint positions
+  ref_lengths <- seqlengths(bsgenome)[ as.character(seqnames(anchor_gr)) ]
+  
+  # valid_coords is TRUE only when ref_lengths is not NA and the range lies within [1, ref_length]
+  valid_coords <- 
+    !is.na(ref_lengths) &
+    start(anchor_gr) >= 1 &
+    end(anchor_gr)   <= ref_lengths
+  valid = as.logical(in_ref_bp) & as.logical(valid_coords)
+  valid_idx = which(isbp)[valid]  # map back to original index
+  
+  seq[valid_idx] = getSeq(bsgenome, anchor_gr[valid], as.character=TRUE)
   return(seq)
 }
 get_anchor_support_width = function(vcf, gr) {
