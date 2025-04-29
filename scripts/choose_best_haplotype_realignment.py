@@ -201,7 +201,7 @@ def run():
     counters = np.zeros(len(args.alignment_sources))
     with pysam.AlignmentFile(args.output, "wb", template=pysam.AlignmentFile(args.alignment_sources[0])) as output:
         for alns in tqdm.tqdm(mappings):
-            assert [x[0] for x in alns] == [alns[0][0]] * 2, "Read names are not equal"
+            assert [x[0] for x in alns] == [alns[0][0]] * len(alns), "Read names are not equal"
             alignments = [list(x[1]) for x in alns]
             best_mapping_idx = find_best_mapping_index(alignments, args.min_mapping_quality, args.tie_breaker_idx)
             best_alignments = alignments[best_mapping_idx]
