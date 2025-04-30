@@ -14,6 +14,7 @@ import pyfaidx
 from joblib import Parallel, delayed
 import os
 import parasail
+import re
 
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
@@ -103,8 +104,12 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
         # Print alignment's score and the alignment itself
         #alignment_orig = next(aligner.align(fa_seq, sequence))
         alignment = align_parasail_local(fa_seq, sequence, match_score_only)
+        cigar = alignment.cigar.decode.decode('ascii')
+        parsed_cigar = re.match(r'^(\d+)([IS])', cigar)
+        t_gap = int(parsed_cigar.group(1)) if parsed_cigar else 0
 
-        start_pos_adjust, end_pos_adjust = adjust_start_end_positions(start_pos - sc_length, alignment.cigar.beg_query, len(alignment.traceback.ref), hap_cigar)
+        start_pos_adjust, end_pos_adjust = adjust_start_end_positions(start_pos - sc_length, t_gap, len(alignment.traceback.ref), hap_cigar)
+
         return alignment.score, start_pos_adjust, end_pos_adjust
     return 0, 0, 0
 
@@ -286,7 +291,7 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
                                                                                                                   local_aligner,
                                                                                                                   reference)
                                 if best_hap is not None:
-                                    if best_hap not in haps_map:
+                                    if (best_hap.query_name, best_hap.flag) not in haps_map:
                                         haps_map[(best_hap.query_name, best_hap.flag)] = []
                                     # Append the SupportingRead object to the list
                                     haps_map[(best_hap.query_name, best_hap.flag)].append(
