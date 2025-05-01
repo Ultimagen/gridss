@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# This script receives alignments of the same data from multiple aligners and chooses the best alignment by some heuristics
+# It is assumed that the alignments are sorted by queryname and that the reads are the same in all alignments
+# See `compare_read_mappings` for the heuristics used to choose the best alignment
 import argparse
 import itertools
 import pysam
@@ -9,6 +13,7 @@ import logging
 def comma_sep(x):
     xsp = x.split(',')
     return (xsp[0],xsp[1],xsp[2])
+
 def parse_args():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description='Merge haplotype alignments from multiple sources. The input BAMs have to be queryname sorted')
@@ -16,7 +21,8 @@ def parse_args():
     parser.add_argument('--output', required=True, type=str,help='The output realigned file')
     parser.add_argument('--min_mapping_quality', type=int, default=60, help='Supplementary alignments with mapping quality below this threshold will be considered poor')
     parser.add_argument('--tie_breaker_idx', type=int, default=None, help='Index of the alignment source to prioritize in case of a tie (e.g. giraffe)')
-    parser.add_argument('--overwrite_mapq', type=comma_sep, help="Comma-separated tuple of three values: index of source to overwrite, min_mapq to change, value_to_assign. Useful for overwriting low-scale mapping qualities of giraffe")
+    parser.add_argument('--overwrite_mapq', type=comma_sep, help="Comma-separated tuple of three values: index of source to overwrite, min_mapq to change, " \
+    "value_to_assign. Useful for overwriting low-scale mapping qualities of giraffe")
     args = parser.parse_args()
     args.alignment_sources = args.alignment_source
     return args
@@ -198,14 +204,19 @@ def run():
     logger.info(f"Output: {args.output}")
     logger.info(f"Min mapping quality: {args.min_mapping_quality}")
     logger.info(f"Tie breaker index: {args.tie_breaker_idx}")
+
+    # It is assumed that the alignments are sorted by queryname and that the reads are the same in all alignments
+    # This allows the process to be linear with no need to store anything in memory 
     validate_sort_order(args.alignment_sources)
+    # generator that groups the alignment by read name
     mappings = zip(*(itertools.groupby(map(MappingKey, pysam.AlignmentFile(x, "rb")), lambda x: x.name) for x in args.alignment_sources))
     logger.info("Choosing best alignment per read: start")    
     counters = np.zeros(len(args.alignment_sources))
     with pysam.AlignmentFile(args.output, "wb", template=pysam.AlignmentFile(args.alignment_sources[0])) as output:
         for alns in tqdm.tqdm(mappings):
+            # check that the read names fetched from each alignment file are the same
             assert [x[0] for x in alns] == [alns[0][0]] * len(alns), "Read names are not equal. The BAMs should contain same reads in the same order"
-            alignments = [list(x[1]) for x in alns]
+            alignments = [list(x[1]) for x in alns]            
             best_mapping_idx = find_best_mapping_index(alignments, args.min_mapping_quality, args.tie_breaker_idx)
             best_alignments = alignments[best_mapping_idx]
             for rec in best_alignments:
