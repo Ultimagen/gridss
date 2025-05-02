@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# This script receives alignments of the same data from multiple aligners and chooses the best alignment by some heuristics
+# It is assumed that the alignments are sorted by queryname and that the reads are the same in all alignments
+# See `compare_read_mappings` for the heuristics used to choose the best alignment
 import argparse
 import itertools
 import pysam
@@ -9,14 +13,16 @@ import logging
 def comma_sep(x):
     xsp = x.split(',')
     return (xsp[0],xsp[1],xsp[2])
+
 def parse_args():
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description='Merge haplotype alignments from multiple sources')
+    parser = argparse.ArgumentParser(description='Merge haplotype alignments from multiple sources. The input BAMs have to be queryname sorted')
     parser.add_argument('--alignment_source', required=True, type=str, action='append', help='Alignment sources (specify multiple times)')
     parser.add_argument('--output', required=True, type=str,help='The output realigned file')
     parser.add_argument('--min_mapping_quality', type=int, default=60, help='Supplementary alignments with mapping quality below this threshold will be considered poor')
     parser.add_argument('--tie_breaker_idx', type=int, default=None, help='Index of the alignment source to prioritize in case of a tie (e.g. giraffe)')
-    parser.add_argument('--overwrite_mapq', type=comma_sep, help="Comma-separated tuple of three values: index of source to overwrite, min_mapq to change, value_to_assign. Useful for overwriting low-scale mapping qualities of giraffe")
+    parser.add_argument('--overwrite_mapq', type=comma_sep, help="Comma-separated tuple of three values: index of source to overwrite, min_mapq to change, " \
+    "value_to_assign. Useful for overwriting low-scale mapping qualities of giraffe")
     args = parser.parse_args()
     args.alignment_sources = args.alignment_source
     return args
@@ -31,9 +37,12 @@ class MappingKey:
         self.mapq = rec.mapping_quality
         self.is_supplementary = rec.is_supplementary
         self.sa_tag = None
+        self._rec = rec
         if rec.has_tag('SA'):
             self.sa_tag = rec.get_tag('SA')
 
+    def to_rec(self):
+        return self._rec
     def poor_sa(self, mq_threshold) -> bool:
         if self.sa_tag is not None and 'decoy' in self.sa_tag:
             return True
@@ -168,6 +177,24 @@ def find_best_mapping_index(mappings: list, mq_threshold: int, tie_breaker_idx: 
             best_index = i
     return best_index
 
+def validate_sort_order(alignment_sources: list):
+    '''Validate that the sort order of the alignment sources is by queryname
+
+    Parameters
+    ----------
+    alignment_sources : list
+        List of alignment sources
+
+    Raises
+    ------
+    ValueError
+        If the sort order of the alignment sources is not the same
+    '''
+    sort_orders = [pysam.AlignmentFile(x, "rb").header.get('HD', {}).get('SO') for x in alignment_sources]
+    for i,so in enumerate(sort_orders):
+        if so != 'queryname':
+            raise ValueError(f"Alignment source {alignment_sources[i]} is not sorted by queryname")
+
 def run():
     args = parse_args()
     logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
@@ -177,33 +204,31 @@ def run():
     logger.info(f"Output: {args.output}")
     logger.info(f"Min mapping quality: {args.min_mapping_quality}")
     logger.info(f"Tie breaker index: {args.tie_breaker_idx}")
-    logger.info("Reading alignment files and creating mapping keys:start")
-    mappings = [sorted([ MappingKey(rec) for rec in pysam.AlignmentFile(x, "rb") ], key=lambda x: x.name) for x in args.alignment_sources]
-    logger.info("Reading alignment files and creating mapping keys:done")
-    mappings = [ {k: list(v) for k, v in itertools.groupby(x, key=lambda x: x.name)} for x in mappings]
-    best_mappings = {}
+
+    # It is assumed that the alignments are sorted by queryname and that the reads are the same in all alignments
+    # This allows the process to be linear with no need to store anything in memory 
+    validate_sort_order(args.alignment_sources)
+    # generator that groups the alignment by read name
+    mappings = zip(*(itertools.groupby(map(MappingKey, pysam.AlignmentFile(x, "rb")), lambda x: x.name) for x in args.alignment_sources))
     logger.info("Choosing best alignment per read: start")    
-    for k in mappings[0].keys():
-        best_mappings[k] = find_best_mapping_index([x[k] for x in mappings], args.min_mapping_quality, args.tie_breaker_idx)
-    logger.info("Choosing best alignment per read: end")    
-
-
-    # Create a new BAM file for output
     counters = np.zeros(len(args.alignment_sources))
-    logger.info("Reading from the sources and writing into the output:start")
     with pysam.AlignmentFile(args.output, "wb", template=pysam.AlignmentFile(args.alignment_sources[0])) as output:
-        for i, r in enumerate(args.alignment_sources):
-            logger.info(f"Reading alignments from {r}")
-            input = pysam.AlignmentFile(r, "rb")
-            for rec in tqdm.tqdm(input):
-                if best_mappings[rec.query_name] == i:
-                    if args.overwrite_mapq is not None and args.overwrite_mapq[0] == i:
-                        if rec.mapping_quality >= args.overwrite_mapq[1] and rec.mapping_quality < args.overwrite_mapq[2]:
-                            rec.mapping_quality = args.overwrite_mapq[2]
-                    output.write(rec)
-                    counters[i] += 1
-            logger.info(f"Wrote {counters[i]} alignments from {r}")
+        for alns in tqdm.tqdm(mappings):
+            # check that the read names fetched from each alignment file are the same
+            assert [x[0] for x in alns] == [alns[0][0]] * len(alns), "Read names are not equal. The BAMs should contain same reads in the same order"
+            alignments = [list(x[1]) for x in alns]            
+            best_mapping_idx = find_best_mapping_index(alignments, args.min_mapping_quality, args.tie_breaker_idx)
+            best_alignments = alignments[best_mapping_idx]
+            for rec in best_alignments:
+                if args.overwrite_mapq is not None and args.overwrite_mapq[0] == best_mapping_idx:
+                    if rec.mapping_quality >= args.overwrite_mapq[1] and rec.mapping_quality < args.overwrite_mapq[2]:
+                        rec.mapping_quality = args.overwrite_mapq[2]
+                output.write(rec.to_rec())
+            counters[best_mapping_idx] += 1
+    for i in range(len(args.alignment_sources)):
+        logger.info(f"Wrote {counters[i]} alignments from {args.alignment_sources[i]} to {args.output}")
     output.close()
+    logger.info("Choosing best alignment per read: start")    
 
 if __name__ == "__main__":
     run()                       
