@@ -107,6 +107,7 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
         cigar = alignment.cigar.decode.decode('ascii')
         parsed_cigar = re.match(r'^(\d+)([IS])', cigar)
         t_gap = int(parsed_cigar.group(1)) if parsed_cigar else 0
+        t_gap += alignment.cigar.beg_query
 
         start_pos_adjust, end_pos_adjust = adjust_start_end_positions(start_pos - sc_length, t_gap, len(alignment.traceback.ref), hap_cigar)
 
