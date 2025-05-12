@@ -125,27 +125,27 @@ def adjust_start_end_positions(start_pos, t_gap, alignmnet_length, hap_cigar_tup
 
     adjusted_end_pos = adjusted_start_pos + alignmnet_length
     # adjust end position by hap_cigar_tuples
-    accumulate_length = 0
-    for op, length in hap_cigar_tuples:
-
-
-        if op == 1: # insertion
-            if accumulate_length <= adjusted_start_pos:
-                adjusted_start_pos -= min(length, adjusted_start_pos - accumulate_length)
-            if accumulate_length <= adjusted_end_pos:
-                adjusted_end_pos -= min(length, adjusted_end_pos - accumulate_length)
-            else:
-                break
-
-        elif op == 2: # deletion
-            if accumulate_length <= adjusted_start_pos:
-                adjusted_start_pos += min(length, adjusted_start_pos - accumulate_length)
-            if accumulate_length <= adjusted_end_pos:
-                adjusted_end_pos += min(length, adjusted_end_pos - accumulate_length)
-            else:
-                break
-
-        accumulate_length += length
+    # accumulate_length = 0
+    # for op, length in hap_cigar_tuples:
+    #
+    #
+    #     if op == 1: # insertion
+    #         if accumulate_length <= adjusted_start_pos:
+    #             adjusted_start_pos -= min(length, adjusted_start_pos - accumulate_length)
+    #         if accumulate_length <= adjusted_end_pos:
+    #             adjusted_end_pos -= min(length, adjusted_end_pos - accumulate_length)
+    #         else:
+    #             break
+    #
+    #     elif op == 2: # deletion
+    #         if accumulate_length <= adjusted_start_pos:
+    #             adjusted_start_pos += min(length, adjusted_start_pos - accumulate_length)
+    #         if accumulate_length <= adjusted_end_pos:
+    #             adjusted_end_pos += min(length, adjusted_end_pos - accumulate_length)
+    #         else:
+    #             break
+    #
+    #     accumulate_length += length
 
     return start_pos + adjusted_start_pos, start_pos + adjusted_end_pos
 
@@ -248,7 +248,9 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
 
     # in case hap direction is reverse, we need to reverse the start and end points
     if best_hap is not None and best_hap.is_reverse:
-        best_start_point, best_end_point = max(best_hap.reference_length - best_end_point + 1, 0), best_hap.reference_length - best_start_point + 1
+        best_start_point, best_end_point = max(best_hap.query_length - best_end_point + 1,
+                                               0), best_hap.query_length - best_start_point + 1
+
 
     return best_hap, best_score, best_start_point, best_end_point, affected_haps
 
