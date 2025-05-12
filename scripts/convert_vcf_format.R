@@ -40,11 +40,7 @@ if(!interactive()){
 
 refgenome = NULL
 if (!is.null(argv$ref) & !is.na(argv$ref) & argv$ref != "") {
-  if (!(argv$ref %in% installed.packages()[,1])) {
-    stop(paste("Missing reference genome fasta file", argv$ref, "."))
-  } else {
-    refgenome=FaFile(argv$ref)
-  }
+  refgenome=FaFile(argv$ref)
 } else {
   msg = paste("No reference genome supplied using --ref. Not performing variant equivalence checks.")
   write(msg, stderr())
