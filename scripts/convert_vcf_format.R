@@ -207,7 +207,7 @@ if (argv$ref == "BSgenome.Hsapiens.UCSC.hg19"){
 
 # Fetch sequences for short DEL variants in one call
 if (length(short_del_indices) > 0){
-  short_del_seqs <- getSeq(refgenome, GRanges(chr.names, short_del_starts, short_del_ends))
+  short_del_seqs <- getSeq(refgenome, GRanges(chr.names, IRanges(short_del_starts, short_del_ends)))
 } else {
   short_del_seqs <- NULL
 }
