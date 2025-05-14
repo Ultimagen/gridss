@@ -4,7 +4,6 @@
 
 import pysam
 import pyfaidx
-import tqdm.auto as tqdm
 import argparse
 import re
 from Bio import Align
@@ -31,16 +30,17 @@ def adjust_and_merge_cigar(cigar):
         """
         length1, op1, length2, op2 = match.groups()
         length1, length2 = int(length1), int(length2)
-
+        adjusted_sequence = ''
         if op1 == op2:
             return f"{length1 + length2}{op1}"
         else:
             overlap = min(length1, length2)
             leftover = abs(length1 - length2)
-            adjusted_sequence = f'{overlap}M'
             if leftover > 0:
                 leftover_op = op1 if length1 > length2 else op2
                 adjusted_sequence += f'{leftover}{leftover_op}'
+
+            adjusted_sequence += f'{overlap}M'
             return adjusted_sequence
 
     def merge_similar_operations(cigar):
@@ -53,6 +53,9 @@ def adjust_and_merge_cigar(cigar):
 
         for op, length in cigar_string_to_cigartuples(cigar, convert_int=False):
             length = int(length)
+            if last_op is None and op=='I':
+                op = 'S'
+                last_length = length
             if op == last_op:
                 last_length += length
             else:
@@ -68,6 +71,7 @@ def adjust_and_merge_cigar(cigar):
 
     adjusted_cigar = re.sub(r'(\d+)([DI])(\d+)([DI])', calculate_adjustment, cigar)
     merged_cigar = merge_similar_operations(adjusted_cigar)
+
 
     return merged_cigar
 
@@ -253,20 +257,8 @@ def align_and_choose(read, sequence, global_aligner, local_aligner, fa_seq, edit
 
     return read, cigar, start_pos, r_start, choice, start_end_del_tuples
 
-def read_is_candidate_for_realign(read: pysam.AlignedSegment, min_required_softclip_length: int):
-    '''Check if the read is a candidate for realignment (if it has minimal softclip of at least min_required_softclip_length)
-    @param read: The read to check
-    @param min_required_softclip_length: The minimum required soft clip length in the alignment to attempt realignment
-    '''
-    if read.cigartuples is None:
-        return False
-    if read.cigartuples[0][0] == 4 and read.cigartuples[0][1] >= min_required_softclip_length:
-        return True
-    if read.cigartuples[-1][0] == 4 and read.cigartuples[-1][1] >= min_required_softclip_length:
-        return True
-    return False
 
-def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10, contig=None, min_required_softclip_length=10):
+def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10, contig=None):
     """
     Find and realign homopolymers in reads in a CRAM file
     @param cram_path: The input CRAM file
@@ -274,7 +266,6 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
     @param reference_path: The reference genome FASTA file path
     @param homopolymer_length: The length of homopolymers to search for
     @param contig: The contig to process
-    @param min_required_softclip_length: The minimum required soft clip length in the alignment to attempt realignment
     """
     # Open the CRAM file
     reference = pyfaidx.Fasta(reference_path, build_index=False)
@@ -302,7 +293,6 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                 sequence = read.query_sequence
                 # Skip reads without a query sequence, or with ambiguous bases
                 skip_read = sequence is None or not all(c in 'atgc' for c in sequence.lower())
-                skip_read = skip_read or not read_is_candidate_for_realign(read, min_required_softclip_length)
                 if not skip_read:
                     # Search for homopolymers in the sequence
                     edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence,
@@ -319,11 +309,11 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                     edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
                                                                                                        homopolymer_length)
 
-                    if ref_del_length > del_length:
+                    if ref_del_length > 0:
                         # In case the reference has more deletions than the read, we need to adjust the read
                         fa_seq = reference[read.reference_name][
-                                 max(read.reference_start - sc_length, 0): read.reference_start + len(
-                                     sequence) - sc_length + ref_del_length - del_length].seq.upper()
+                                 max(read.reference_start - sc_length - ref_del_length, 0) : read.reference_start + len(
+                                     sequence) - sc_length + del_length].seq.upper()
                         edited_fa_seq, ref_start_end_del_tuples, ref_del_length = remove_long_homopolymers(fa_seq,
                                                                                                            homopolymer_length)
 
@@ -335,7 +325,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                                                                                                      local_aligner,
                                                                                                      edited_fa_seq,
                                                                                                      edited_sequence,
-                                                                                                     read.reference_start,
+                                                                                                     read.reference_start - ref_del_length,
                                                                                                      sc_length,
                                                                                                      start_end_del_tuples)
                     choices[choice] += 1
@@ -347,14 +337,14 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
 
                     # Add insertions and deletions into the CIGAR string
                     updated_cigar = cigar
-                    # Insertions by the query
-                    for start_del, end_del in start_end_del_tuples:
-                        updated_cigar, _ = insert_operation_into_cigar(updated_cigar, start_del, end_del - start_del, 0,
-                                                                       'I')
+
                     # Deletions by the reference
                     for start_del, end_del in ref_start_end_del_tuples:
-                        updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - r_start,
+                        updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - r_start - homopolymer_length,
                                                                                end_del - start_del, start_pos, 'D')
+
+                    for start_del, end_del in start_end_del_tuples:
+                        updated_cigar, start_pos = insert_operation_into_cigar(updated_cigar, start_del - homopolymer_length, end_del - start_del, start_pos,'I')
 
                     adjusted_cigar = adjust_and_merge_cigar(updated_cigar)
                     read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
@@ -483,9 +473,17 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
     accumulated_length = 0
     operation_inserted = False
     i = 0
-    if position < 0 and op_type == 'D':
-        start_pos += op_size
-        return cigar, start_pos
+    if position <= 0 and op_type == 'D':
+        if parsed_cigar[0][0] == 'S':
+            start_pos += op_size
+            return cigar, start_pos
+        else:
+            return f"{op_size}D" + cigar, start_pos
+    if position <= 0 and op_type == 'I':
+        if parsed_cigar[0][0] == 'S':
+            return f"{op_size}S" + cigar, start_pos
+        else:
+            return f"{op_size}I" + cigar, start_pos
     while i < len(parsed_cigar):
         op, count = parsed_cigar[i]
         skip_operation = False
@@ -546,7 +544,6 @@ parser.add_argument('--input', required=True, help='The input CRAM file')
 parser.add_argument('--output', required=True, help='The output CRAM file')
 parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
 parser.add_argument('--homopolymer_length', type=int, default=10, help='The length of homopolymers to search for')
-parser.add_argument('--min_required_softclip_length', type=int, default=10, help='The minimum required soft clip length in the alignment to attempt realignment')
 parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
 args = parser.parse_args()
 
@@ -563,9 +560,9 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
 
     results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
         delayed(realign_homopolymers)(
-            args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig, args.min_required_softclip_length
+            args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig
         )
-        for contig in tqdm.tqdm(large_contigs)
+        for contig in large_contigs
     )
     total_count = 0
     total_count_homopolymer = 0
@@ -608,4 +605,3 @@ with pysam.AlignmentFile(args.input, "rc") as cram_file:
     logger.info(f"Reads where original sequence is better (local): {total_choices[1]}")
     logger.info(f"Reads where reverse complement sequence is better: {total_choices[2]}")
     logger.info(f"Reads where reverse complement sequence is better (local): {total_choices[3]}")
-
