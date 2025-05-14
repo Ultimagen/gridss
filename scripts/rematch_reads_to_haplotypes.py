@@ -204,7 +204,7 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
         crams_array = [(cram, 0) for cram in (germline_crams or [])]
     for cram_file, category in crams_array:
         logger.debug(f"Processing {cram_file} with category {category}")
-        with pysam.AlignmentFile(cram_file) as reads_cram:
+        with pysam.AlignmentFile(cram_file, reference_filename=reference_path) as reads_cram:
             with open(bed_file_regions, "r") as bed:
                 for line in bed:
                     logger.debug(f"Processing line: {line.strip()}")
