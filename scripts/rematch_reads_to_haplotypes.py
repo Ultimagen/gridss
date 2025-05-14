@@ -60,7 +60,7 @@ def align_parasail_local(seq1, seq2, match_score_only):
         )
         return res
 
-def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, match_score_only = False):
+def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, match_score_only = False):
     """
     Perform the alignment between two sequences
     @param fa_seq: The reference sequence
@@ -89,7 +89,7 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
         start_pos_adjust, end_pos_adjust = adjust_start_end_positions(start_pos - sc_length, t_gap, len(alignment.traceback.ref), hap_cigar)
 
         return alignment.score, start_pos_adjust, end_pos_adjust
-    return 0, 0, 0
+
 
 def adjust_start_end_positions(start_pos, t_gap, alignmnet_length, hap_cigar_tuples):
     """
@@ -136,15 +136,14 @@ def find_best_haplotype(region_haps, read, reference):
         # local alignment
         if((read_start_position <= hap_end_position) and
             (read_end_position >= hap_start_position) and
-            ((sc_size_start== 0 and sc_size_end == 0) or (sc_size_start > 0 and read.reference_start >= hap_start_position) or
-            (sc_size_end > 0 and read.reference_end <= hap_end_position))):
+            ((sc_length_start == 0 and sc_length_end == 0) or (sc_length_start > 0 and read.reference_start >= hap_start_position) or
+            (sc_length_end > 0 and read.reference_end <= hap_end_position))):
 
             score, _, _ = run_alignment(hap_seq,
                                           read_seq,
                                           hap_start_position,
                                           0,
                                           hap.cigartuples,
-                                          local_aligner,
                                           True)
             if score > best_score:
                 best_score = score
@@ -162,10 +161,9 @@ def find_best_haplotype(region_haps, read, reference):
              min(read.reference_end + sc_length_end + del_length, len(reference[read.reference_name]))].seq.upper()
     ref_score, _, _ = run_alignment(ref_seq,
                                     read_seq,
-                                    read_start,
+                                    read_start_position,
                                     0,
                                     [],
-                                    local_aligner,
                                       True)
     if ref_score > best_score:
         best_score = ref_score
@@ -177,7 +175,6 @@ def find_best_haplotype(region_haps, read, reference):
                                       best_hap_start_position,
                                       0,
                                       best_hap.cigartuples,
-                                      local_aligner,
                                        False)
 
         best_start_point = start_pos_local - best_hap_start_position
