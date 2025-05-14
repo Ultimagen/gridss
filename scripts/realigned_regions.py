@@ -1,3 +1,6 @@
+# DESCRIPTION
+#    This script extracts realigned regions from BAM files
+#
 import pysam
 from collections import defaultdict
 import sys

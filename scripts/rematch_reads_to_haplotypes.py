@@ -1,14 +1,12 @@
 # DESCRIPTION
-#    This script realigns haplotypes in the areas that contain long homopolymer runs,
-#    where UG data introduces false variation due to the limit on calling homopolymer length
+#    This script realigns haplotypes in the areas that contain long homopolymer runs
+#
 from itertools import accumulate
-
 import numpy as np
 import pysam
 import argparse
 import logging
 import subprocess
-from Bio import Align
 import array
 import pyfaidx
 from joblib import Parallel, delayed
@@ -62,25 +60,6 @@ def align_parasail_local(seq1, seq2, match_score_only):
         )
         return res
 
-def create_aligner(mode, match, mismatch, gap_penalty, gap_extension_penalty, sc_penalty):
-    """
-    Create a new PairwiseAligner object with the specified parameters
-    """
-    # Create a new PairwiseAligner object
-    aligner = Align.PairwiseAligner()
-    aligner.mode = mode
-    aligner.match_score = match
-    aligner.mismatch_score = mismatch
-    # Set gap scoring
-    aligner.open_gap_score = gap_penalty
-    aligner.extend_gap_score = gap_extension_penalty
-
-    # Set end gap scores to 0.0 to not penalize them
-    aligner.target_end_gap_score = 0
-    aligner.query_end_gap_score = sc_penalty
-
-    return aligner
-
 def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, match_score_only = False):
     """
     Perform the alignment between two sequences
@@ -88,21 +67,19 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
     @param sequence: The query sequence
     @param start_pos: The start position of the read
     @param sc_length: The length of soft clipping
-    @param aligner: The alignment object
     @param hap_cigar: The CIGAR string of the haplotype
     @param match_score_only: If True, return only the match score, for running faster
     @return: The alignment score, CIGAR string, start position, and query start position
     """
-    # Perform the alignment between two sequences
+
     if len(fa_seq) == 0 or len(sequence) == 0:
         return 0, 0, 0
 
     if match_score_only:
-        #return next(aligner.align(fa_seq, sequence)).score, 0, 0
+        # for saving time, get score only
         return align_parasail_local(fa_seq, sequence, match_score_only).score, 0, 0
     else:
-        # Print alignment's score and the alignment itself
-        #alignment_orig = next(aligner.align(fa_seq, sequence))
+        # calculate start and end as well
         alignment = align_parasail_local(fa_seq, sequence, match_score_only)
         cigar = alignment.cigar.decode.decode('ascii')
         parsed_cigar = re.match(r'^(\d+)([IS])', cigar)
@@ -116,53 +93,23 @@ def run_alignment(fa_seq, sequence, start_pos, sc_length, hap_cigar, aligner, ma
 
 def adjust_start_end_positions(start_pos, t_gap, alignmnet_length, hap_cigar_tuples):
     """
-        Convert the aligned segments in biopython format to a CIGAR farmat.
+        Adjust start and end positions according to sc and the beginning of the alignment
     """
-    adjusted_start_pos = 0  # This will store the adjusted start position based on initial target insertions
+    adjusted_start_pos = 0
 
     if t_gap > 0:
         adjusted_start_pos = t_gap
 
     adjusted_end_pos = adjusted_start_pos + alignmnet_length
-    # adjust end position by hap_cigar_tuples
-    # accumulate_length = 0
-    # for op, length in hap_cigar_tuples:
-    #
-    #
-    #     if op == 1: # insertion
-    #         if accumulate_length <= adjusted_start_pos:
-    #             adjusted_start_pos -= min(length, adjusted_start_pos - accumulate_length)
-    #         if accumulate_length <= adjusted_end_pos:
-    #             adjusted_end_pos -= min(length, adjusted_end_pos - accumulate_length)
-    #         else:
-    #             break
-    #
-    #     elif op == 2: # deletion
-    #         if accumulate_length <= adjusted_start_pos:
-    #             adjusted_start_pos += min(length, adjusted_start_pos - accumulate_length)
-    #         if accumulate_length <= adjusted_end_pos:
-    #             adjusted_end_pos += min(length, adjusted_end_pos - accumulate_length)
-    #         else:
-    #             break
-    #
-    #     accumulate_length += length
 
     return start_pos + adjusted_start_pos, start_pos + adjusted_end_pos
 
-def find_best_haplotype(region_haps, read, local_aligner, reference):
+
+def find_best_haplotype(region_haps, read, reference):
     # in case cigar starts with soft clip, we need to adjust the haplotype start
     affected_haps = set()
-    sc_size_start = 0
-    sc_size_end = 0
-    if read.cigar[0][0] == 4:
-        read_start = read.reference_start - read.cigar[0][1]
-        sc_size_start = read.cigar[0][1]
-    else:
-        read_start = read.reference_start
-
-    # in case cigar ends with soft clip, we need to adjust the haplotype end
-    if read.cigar[-1][0] == 4:
-        sc_size_end = read.cigar[-1][1]
+    sc_length_start = read.cigar[0][1] if read.cigar[0][0] == 4 else 0
+    sc_length_end = read.cigar[-1][1] if read.cigar[-1][0] == 4 else 0
 
     # find the best alignment
     best_score = -np.inf
@@ -171,22 +118,16 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
     best_end_point = None
     read_seq = read.query_sequence
     best_hap_start_position = None
-    best_hap_end_position = None
     best_hap_seq = None
 
-    read_start_position = read.reference_start - sc_size_start
-    read_end_position = read.reference_end + sc_size_end
+    read_start_position = read.reference_start - sc_length_start
+    read_end_position = read.reference_end + sc_length_end
     # extract the region of the assembly that the read overlaps
     for hap in region_haps:
         # only in case we overlap the breakpoint
         # read.reference_start is the breakpoint position
-        hap_sc_size_start = 0
-        hap_sc_size_end = 0
-        if hap.cigar[0][0] == 4:
-            hap_sc_size_start = hap.cigar[0][1]
-
-        if hap.cigar[-1][0] == 4:
-            hap_sc_size_end = hap.cigar[-1][1]
+        hap_sc_size_start = hap.cigar[0][1] if hap.cigar[0][0] == 4 else 0
+        hap_sc_size_end = hap.cigar[-1][1] if hap.cigar[-1][0] == 4 else 0
 
         hap_seq = hap.query_sequence
         hap_start_position = hap.reference_start - hap_sc_size_start
@@ -214,9 +155,6 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
                 affected_haps.add((hap.query_name, hap.flag))
 
     # check reference sequence as well
-    # sift clip length from the start and end of the read
-    sc_length_start = read.cigar[0][1] if read.cigar[0][0] == 4 else 0
-    sc_length_end = read.cigar[-1][1] if read.cigar[-1][0] == 4 else 0
     del_length = sum([length for op, length in read.cigartuples if op == 2])
 
     ref_seq = reference[read.reference_name][
@@ -257,7 +195,6 @@ def find_best_haplotype(region_haps, read, local_aligner, reference):
 def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_path, bed_file_regions, contig, output_path):
 
     logger.info(f"Rematching reads to haplotypes on contig: {contig}")
-    local_aligner = create_aligner('local', match, mismatch, gap_penalty, gap_extension_penalty, 0)
     reference = pyfaidx.Fasta(reference_path, build_index=False)
 
     haps_map = dict()
@@ -291,7 +228,6 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
                                 logger.debug(f"Processing read: {read.query_name} with cigartuples {read.cigartuples} ")
                                 best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(region_haps,
                                                                                                                   read,
-                                                                                                                  local_aligner,
                                                                                                                   reference)
                                 if best_hap is not None:
                                     if (best_hap.query_name, best_hap.flag) not in haps_map:
@@ -320,8 +256,7 @@ def rematch_homopolymere(assembly_path, tumor_crams, germline_crams, reference_p
                     hap.set_tag("os", array.array("i", [read.start_overlap for read in supporting_reads]))
                     hap.set_tag("oe", array.array("i", [read.end_overlap for read in supporting_reads]))
                     hap.set_tag("ec", array.array("i", [read.category for read in supporting_reads]))
-                    hap.set_tag("et",
-                                array.array("b", [0 for read in supporting_reads]))  # ?? Not sure about what is et
+                    hap.set_tag("et", array.array("b", [0 for read in supporting_reads]))
                     output.write(hap)
                 elif (hap.query_name, hap.flag) in total_affected_haps:
                     # in case the haplotype is affected but no reads are supporting it
