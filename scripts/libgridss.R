@@ -16,6 +16,7 @@ library(tidyverse, quietly=TRUE, warn.conflicts=FALSE)
 library(stringr, quietly=TRUE, warn.conflicts=FALSE)
 library(testthat, quietly=TRUE, warn.conflicts=FALSE)
 library(stringdist, quietly=TRUE, warn.conflicts=FALSE)
+library(Rsamtools, quietly=TRUE, warn.conflicts=FALSE)
 
 options(stringsAsFactors=FALSE)
 source(paste0(ifelse(!is.null(getOption("gridss.config.dir")), paste0(getOption("gridss.config.dir"), "/"), ""), "gridss.config.R"))
@@ -118,7 +119,7 @@ gridss_overlaps_breakend_pon = function(gr,
 #' should be filtered
 #' @param somatic_filters apply somatic filters.
 #' Assumes the normal and tumour samples are the first and second respectively
-gridss_breakpoint_filter = function(gr, vcf, bsgenome, min_support_filters=TRUE, somatic_filters=TRUE, support_quality_filters=TRUE, normalOrdinal, tumourOrdinal, pon_dir=NULL, pon_maxgap=4) {
+gridss_breakpoint_filter = function(gr, vcf, refgenome, min_support_filters=TRUE, somatic_filters=TRUE, support_quality_filters=TRUE, normalOrdinal, tumourOrdinal, pon_dir=NULL, pon_maxgap=4) {
 	vcf = vcf[names(gr)]
 	i = info(vcf)
 	g = geno(vcf)
@@ -157,8 +158,8 @@ gridss_breakpoint_filter = function(gr, vcf, bsgenome, min_support_filters=TRUE,
 
 	  filtered = .addFilter(filtered, "small.del.ligation.fp", is_likely_library_prep_fragment_ligation_artefact(gr, vcf))
 	  filtered = .addFilter(filtered, "small.inv.hom.fp", is_small_inversion_with_homology(gr, vcf))
-	  if (!is.null(bsgenome)) {
-	    filtered = .addFilter(filtered, "small.replacement.fp", is_indel_artefact(gr, bsgenome))
+	  if (!is.null(refgenome)) {
+	    filtered = .addFilter(filtered, "small.replacement.fp", is_indel_artefact(gr, refgenome))
 	  }
 	}
 	filtered = .addFilter(filtered, "cohortMinSize", is_too_small_event(gr))
@@ -253,18 +254,18 @@ is_likely_library_prep_fragment_ligation_artefact = function(gr, vcf, minsize=10
   }
   return(result)
 }
-is_indel_artefact = function(gr, bsgenome, minsizedelta=5, minEditDistancePerBase=0.5, maxEditDistancePerInversionBase=0.2) {
+is_indel_artefact = function(gr, refgenome, minsizedelta=5, minEditDistancePerBase=0.5, maxEditDistancePerInversionBase=0.2) {
   result = rep(FALSE, length(gr))
   gr$isOfInterest = is_short_del(gr) & abs(abs(start(gr) - start(gr[ifelse(is.na(gr$partner), names(gr), gr$partner)])) - gr$insLen) < minsizedelta
   gr$isOfInterest = gr$isOfInterest & !is.na(gr$partner) & gr[ifelse(is.na(gr$partner), names(gr), gr$partner)]$isOfInterest
   ucscgr = gr
   seqlevelsStyle(ucscgr) = "UCSC"
-  gr$isOfInterest = gr$isOfInterest & as.logical(seqnames(ucscgr) %in% seqnames(bsgenome))
+  gr$isOfInterest = gr$isOfInterest & as.logical(seqnames(ucscgr) %in% seqnames(seqinfo(refgenome)))
   igr = gr[gr$isOfInterest]
   seqlevelsStyle(igr) = "UCSC"
   inseq = igr$insSeq
   igr=GRanges(seqnames=seqnames(igr), ranges=IRanges(start=pmin(start(igr), start(partner(igr))), end=pmax(end(igr), end(partner(igr)))))
-  refseq = getSeq(bsgenome, names=igr, as.character=TRUE)
+  refseq = getSeq(refgenome, names=igr, as.character=TRUE)
   revSeq = as.character(reverseComplement(DNAStringSet(refseq)))
   fwdEditDistance = stringdist(inseq, refseq, method="lv")
   invEditDistance = stringdist(inseq, revSeq, method="lv")
@@ -817,12 +818,13 @@ align_breakpoints <- function(vcf, align = c("centre"), is_higher_breakend = nam
   # Update REF base to reflect new positions
   if (!is.null(refgenome)) {
     chr = seqnames(rowRanges(vcf))
-    if (argv$ref == "BSgenome.Hsapiens.UCSC.hg19"){
+    if (!grepl("^chr", seqnames(seqinfo(refgenome))[1])) {
+      # Chromosome names do NOT contain 'chr' (i.e., not UCSC style)
       chr = as.vector(mapSeqlevels(as.vector(chr),"UCSC"))
     }
 
-    valid_positions = as.logical(chr %in% seqnames(refgenome))
-    ref_bases = getSeq(refgenome, names = chr[valid_positions], start = new_positions[valid_positions], end = new_positions[valid_positions])
+    valid_positions = as.logical(chr %in% seqnames(seqinfo(refgenome)))
+    ref_bases = getSeq(refgenome, GRanges(chr[valid_positions], IRanges(new_positions[valid_positions], new_positions[valid_positions])))
     ref_bases = as.character(ref_bases)
     VariantAnnotation::fixed(vcf)$REF[valid_positions] = DNAStringSet(ref_bases)[valid_positions]
   }
@@ -1249,12 +1251,12 @@ linked_by_different_foldback_inversion_paths = function(gr, max_inversion_length
       invEditDistance=stringdist(spanningSeq, foldbackInvertedSeq, method="lv"))
   return(hitdf)
 }
-sequence_common_prefix = function(gr, anchor_bases, bsgenome, ...) {
+sequence_common_prefix = function(gr, anchor_bases, refgenome, ...) {
   if (is.null(gr$sampleId)) {
     gr$sampleId = rep("placeholder", length(gr))
   }
   insSeq = .insSeq(gr)
-  anchor_sequence = get_partner_anchor_sequence(gr, anchor_bases, bsgenome)
+  anchor_sequence = get_partner_anchor_sequence(gr, anchor_bases, refgenome)
   hitdf = findOverlaps(gr, gr, ...) %>%
     as.data.frame() %>%
     filter(
@@ -1308,14 +1310,14 @@ sequence_common_prefix = function(gr, anchor_bases, bsgenome, ...) {
 }
 #' Returns the sequence encountered at the other side of a breakpoint when traversing
 #' across it.
-get_partner_anchor_sequence = function(gr, anchor_length, bsgenome) {
+get_partner_anchor_sequence = function(gr, anchor_length, refgenome) {
   if (length(gr) == 0) {
     return(character(0))
   }
   seq = rep("", length(gr))
   names(seq) = names(gr)
   seqlevelsStyle(gr) = "UCSC"
-  in_ref = seqnames(gr) %in% seqnames(bsgenome)
+  in_ref = seqnames(gr) %in% seqnames(seqinfo(refgenome))
   if(any(!in_ref)) {
     msg = paste("Ignoring contigs not in reference genome: ", paste0(unique(seqnames(gr)[!in_ref])), collapse = " ")
     warning(msg)
@@ -1328,7 +1330,7 @@ get_partner_anchor_sequence = function(gr, anchor_length, bsgenome) {
     strand=ifelse(strand(partnergr)=="+", "-", "+"))
 
   in_ref_bp = in_ref[isbp]  # filter in_ref for breakpoint positions
-  ref_lengths <- seqlengths(bsgenome)[ as.character(seqnames(anchor_gr)) ]
+  ref_lengths <- seqlengths(refgenome)[ as.character(seqnames(anchor_gr)) ]
   
   # valid_coords is TRUE only when ref_lengths is not NA and the range lies within [1, ref_length]
   valid_coords <- 
@@ -1338,7 +1340,7 @@ get_partner_anchor_sequence = function(gr, anchor_length, bsgenome) {
   valid = as.logical(in_ref_bp) & as.logical(valid_coords)
   valid_idx = which(isbp)[valid]  # map back to original index
   
-  seq[valid_idx] = getSeq(bsgenome, anchor_gr[valid], as.character=TRUE)
+  seq[valid_idx] = getSeq(refgenome, anchor_gr[valid], as.character=TRUE)
   return(seq)
 }
 get_anchor_support_width = function(vcf, gr) {
@@ -1440,11 +1442,11 @@ linked_by_adjacency = function(
     distinct())
 }
 #'
-#' @param bsgenome BSGenome reference genome used in the VCF
-linked_by_equivalent_variants = function(vcf, gr, min_anchor_bases=20, max_per_base_edit_distance=0.1, bsgenome) {
+#' @param refgenome fasta reference genome used in the VCF
+linked_by_equivalent_variants = function(vcf, gr, min_anchor_bases=20, max_per_base_edit_distance=0.1, refgenome) {
   # go as far as we have support on the other side for when comparing
   anchor_bases = pmax(min_anchor_bases, get_partner_anchor_support_width(vcf, gr))
-  similar_calls_df = sequence_common_prefix(gr, anchor_bases=anchor_bases, maxgap=5, bsgenome) %>%
+  similar_calls_df = sequence_common_prefix(gr, anchor_bases=anchor_bases, maxgap=5, refgenome) %>%
     filter(per_base_edit_distance <= max_per_base_edit_distance) %>%
     dplyr::select(ssourceId, qsourceId) %>%
     mutate(linked_by=paste0("eqv", row_number())) %>%

@@ -15,7 +15,7 @@ thisFile <- function() { # https://stackoverflow.com/questions/1815606/determine
 	}
 }
 argp = arg_parser("Link GRIDSS breakends together to create SV. In that way we have start position and end breakends of the variant and it is considered as an SV variant")
-argp = add_argument(argp, "--ref", default="", help="Reference genome to use. Must be a valid installed BSgenome package")
+argp = add_argument(argp, "--ref", default="", help="Reference genome fasta file to use")
 argp = add_argument(argp, "--input", help="GRIDSS VCF")
 argp = add_argument(argp, "--output", help="High confidence somatic subset")
 argp = add_argument(argp, "--fulloutput", help="Full call set excluding obviously germline call.")
@@ -62,11 +62,7 @@ if (file.exists(libgridssfile)) {
 }
 refgenome = NULL
 if (!is.null(argv$ref) & !is.na(argv$ref) & argv$ref != "") {
-  if (!(argv$ref %in% installed.packages()[,1])) {
-    stop(paste("Missing reference genome package", argv$ref, "."))
-  } else {
-    refgenome=eval(parse(text=paste0("library(", argv$ref, ")\n", argv$ref)))
-  }
+    refgenome=FaFile(argv$ref)
 } else {
   msg = paste("No reference genome supplied using --ref. Not performing variant equivalence checks.")
   write(msg, stderr())
@@ -124,7 +120,7 @@ if (length(bpgr) > 0) {
   info(full_vcf[names(bpgr)])$TAF = bpgr$af_str
 }
 write(paste(Sys.time(), "Filtering breakpoints", argv$input), stderr())
-bpfiltered = gridss_breakpoint_filter(bpgr, full_vcf, bsgenome=refgenome, pon_dir=NULL, normalOrdinal=NULL, tumourOrdinal=1, somatic_filters=FALSE, min_support_filters=FALSE)
+bpfiltered = gridss_breakpoint_filter(bpgr, full_vcf, refgenome=refgenome, pon_dir=NULL, normalOrdinal=NULL, tumourOrdinal=1, somatic_filters=FALSE, min_support_filters=FALSE)
 filters[names(bpgr)] = bpfiltered
 if (argv$gc) { gc() }
 
@@ -295,7 +291,7 @@ link_rescue = c(link_rescue, bpgr[link_rescue[link_rescue %in% names(bpgr)]]$par
 # Note that we don't rescue equivalent events
 begr$partner = rep(NA, length(begr))
 if (!is.null(refgenome)) {
-  eqv_link_df = linked_by_equivalent_variants(full_vcf, as(rbind(as.data.frame(bpgr), as.data.frame(begr)), "GRanges"), bsgenome=refgenome) %>%
+  eqv_link_df = linked_by_equivalent_variants(full_vcf, as(rbind(as.data.frame(bpgr), as.data.frame(begr)), "GRanges"), refgenome=refgenome) %>%
     filter(passes_final_filters(vcf[sourceId]) | sourceId %in% link_rescue) %>%
     group_by(linked_by) %>%
     filter(n() == 2) %>%
@@ -375,7 +371,7 @@ if (!is.na(argv$fulloutput)) {
       stopifnot(vcf_chr[indices[1]] == vcf_chr[indices[2]])
       
       # add the relevant part to ALT
-      if (argv$ref == "BSgenome.Hsapiens.UCSC.hg19"){
+      if (!grepl("^chr", seqnames(seqinfo(refgenome))[1])) {
         vcf_alt[first_pos] = paste0(vcf_alt_orig[[first_pos]], 'NNNNNNNNNN', vcf_alt_orig[[second_pos]], '[', vcf_chr[[second_pos]],':',vcf_pos[[second_pos]],'[')
         vcf_alt[second_pos] = paste0(']', vcf_chr[first_pos],':',vcf_pos[first_pos],']', vcf_alt_orig[[first_pos]], 'NNNNNNNNNN', vcf_alt_orig[[second_pos]])
       

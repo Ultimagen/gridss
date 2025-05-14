@@ -10,7 +10,7 @@ options(scipen = 999)
 # Create a parser object
 if(!interactive()){
   argp = arg_parser("convert VCF format")
-  argp = add_argument(argp, "--reference", default="", help="Reference genome to use. Must be a valid installed BSgenome package")
+  argp = add_argument(argp, "--reference", default="", help="Reference genome fasta file to use.")
   argp = add_argument(argp, "--input_vcf", help="The input vcf file")
   argp = add_argument(argp, "--output_vcf", help="The output vcf file (without the .bgz suffix)")
   argp = add_argument(argp, "--n_jobs", type="integer", default=-1, help="Number of parallel jobs")
@@ -40,11 +40,7 @@ if(!interactive()){
 
 refgenome = NULL
 if (!is.null(argv$ref) & !is.na(argv$ref) & argv$ref != "") {
-  if (!(argv$ref %in% installed.packages()[,1])) {
-    stop(paste("Missing reference genome package", argv$ref, "."))
-  } else {
-    refgenome=eval(parse(text=paste0("library(", argv$ref, ")\n", argv$ref)))
-  }
+  refgenome=FaFile(argv$ref)
 } else {
   msg = paste("No reference genome supplied using --ref. Not performing variant equivalence checks.")
   write(msg, stderr())
@@ -211,7 +207,7 @@ if (argv$ref == "BSgenome.Hsapiens.UCSC.hg19"){
 
 # Fetch sequences for short DEL variants in one call
 if (length(short_del_indices) > 0){
-  short_del_seqs <- getSeq(refgenome, names = chr.names, start = short_del_starts, end = short_del_ends)
+  short_del_seqs <- getSeq(refgenome, GRanges(chr.names, IRanges(short_del_starts, short_del_ends)))
 } else {
   short_del_seqs <- NULL
 }
