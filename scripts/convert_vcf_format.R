@@ -10,7 +10,7 @@ options(scipen = 999)
 # Create a parser object
 if(!interactive()){
   argp = arg_parser("convert VCF format")
-  argp = add_argument(argp, "--reference", default="", help="Reference fasta genome file to use.")
+  argp = add_argument(argp, "--reference", default="", help="Reference genome fasta file to use.")
   argp = add_argument(argp, "--input_vcf", help="The input vcf file")
   argp = add_argument(argp, "--output_vcf", help="The output vcf file (without the .bgz suffix)")
   argp = add_argument(argp, "--n_jobs", type="integer", default=-1, help="Number of parallel jobs")

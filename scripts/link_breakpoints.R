@@ -15,7 +15,7 @@ thisFile <- function() { # https://stackoverflow.com/questions/1815606/determine
 	}
 }
 argp = arg_parser("Link GRIDSS breakends together to create SV. In that way we have start position and end breakends of the variant and it is considered as an SV variant")
-argp = add_argument(argp, "--ref", default="", help="Fasta Reference genome to use")
+argp = add_argument(argp, "--ref", default="", help="Reference genome fasta file to use")
 argp = add_argument(argp, "--input", help="GRIDSS VCF")
 argp = add_argument(argp, "--output", help="High confidence somatic subset")
 argp = add_argument(argp, "--fulloutput", help="Full call set excluding obviously germline call.")
