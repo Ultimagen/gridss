@@ -315,4 +315,4 @@ with pysam.AlignmentFile(args.assembly, "rc") as assembly_file:
             os.remove(f"{args.output}{contig}.bam")
             os.remove(f"{args.output}{contig}.bam.bai")
 
-        pysam.index(args.output)
+pysam.index(args.output)
