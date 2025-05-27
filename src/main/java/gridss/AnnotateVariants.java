@@ -6,6 +6,7 @@ import gridss.cmdline.VcfTransformCommandLineProgram;
 import htsjdk.samtools.util.AsyncBufferedIterator;
 import htsjdk.samtools.util.CloseableIterator;
 import htsjdk.samtools.util.Log;
+import org.broadinstitute.barclay.argparser.Argument;
 import org.broadinstitute.barclay.argparser.CommandLineProgramProperties;
 
 import java.io.BufferedOutputStream;
@@ -22,7 +23,12 @@ import java.util.stream.Collectors;
         oneLineSummary = "Annotates breakpoint variant calls",
         programGroup = gridss.cmdline.programgroups.VariantCalling.class
 )
+
 public class AnnotateVariants extends VcfTransformCommandLineProgram {
+
+	@Argument(shortName="ALIGNER_OFF", doc="Turn aligner annotation off")
+	public Boolean ALIGNER_OFF = false;
+
 	private static final Log log = Log.getInstance(AnnotateVariants.class);
 	public static void writeAssemblyBreakends(File file, AssemblyEvidenceSource assemblyEvidence) throws IOException {
 		log.info("Writing breakend assembly support.");

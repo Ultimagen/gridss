@@ -4,6 +4,7 @@ import au.edu.wehi.idsv.*;
 import au.edu.wehi.idsv.picard.ReferenceLookup;
 import au.edu.wehi.idsv.sam.SAMRecordUtil;
 import au.edu.wehi.idsv.vcf.VcfInfoAttributes;
+import gridss.AnnotateVariants;
 import htsjdk.samtools.CigarElement;
 import htsjdk.samtools.TextCigarCodec;
 import htsjdk.samtools.util.SequenceUtil;
@@ -111,19 +112,25 @@ public class BreakpointHomology {
 	public static VariantContextDirectedBreakpoint annotate(ProcessingContext context, VariantContextDirectedBreakpoint bp) {
 		if (!bp.isBreakendExact()) return bp;
 		IdsvVariantContextBuilder builder = new IdsvVariantContextBuilder(context, bp);
-		BreakpointHomology bh = BreakpointHomology.calculate(
-				context.getReference(),
-				bp.getBreakendSummary().getNominalPosition(),
-				bp.getUntemplatedSequence(),
-				context.getVariantCallingParameters().maxBreakendHomologyLength,
-				context.getVariantCallingParameters().breakendHomologyAlignmentMargin);
-		int[] bounds;
-		if (bp.getBreakendSummary().direction == BreakendDirection.Forward) {
-			bounds = new int[] { -bh.getLocalHomologyLength(), bh.getRemoteHomologyLength() };
-		} else {
-			bounds = new int[] { -bh.getRemoteHomologyLength(), bh.getLocalHomologyLength() };
+		boolean skipAlignment = false;
+		if ( context.getCommandLineProgram() instanceof AnnotateVariants ) {
+			skipAlignment = ((AnnotateVariants)context.getCommandLineProgram()).ALIGNER_OFF;
 		}
-		builder.attribute(VcfInfoAttributes.INEXACT_HOMPOS, bounds);
+		if ( !skipAlignment ) {
+			BreakpointHomology bh = BreakpointHomology.calculate(
+					context.getReference(),
+					bp.getBreakendSummary().getNominalPosition(),
+					bp.getUntemplatedSequence(),
+					context.getVariantCallingParameters().maxBreakendHomologyLength,
+					context.getVariantCallingParameters().breakendHomologyAlignmentMargin);
+			int[] bounds;
+			if (bp.getBreakendSummary().direction == BreakendDirection.Forward) {
+				bounds = new int[]{-bh.getLocalHomologyLength(), bh.getRemoteHomologyLength()};
+			} else {
+				bounds = new int[]{-bh.getRemoteHomologyLength(), bh.getLocalHomologyLength()};
+			}
+			builder.attribute(VcfInfoAttributes.INEXACT_HOMPOS, bounds);
+		}
 		return (VariantContextDirectedBreakpoint)builder.make();
 	}
 }
