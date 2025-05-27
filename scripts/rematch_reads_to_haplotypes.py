@@ -237,9 +237,12 @@ def rematch_reads_to_haplotypes_in_contig(assembly_path, tumor_crams, germline_c
                                 nm = None
                             # Exclude PCR/optical duplicates, low mapping quality reads, and reads with small number of mismatches
                             if (not read.is_duplicate) and (mapq > min_mapq) and \
-                                (min_sc_indel_size_values[category] == 0 or
-                                 any(op in {1, 2, 4} and length > min_sc_indel_size_values[category] for op, length in (read.cigartuples or []))) or \
-                                    (nm is not None and nm >= min_mismatch_count_values[category]):
+                                    (not min_sc_indel_size_values and not min_mismatch_count_values) or \
+                                    (min_sc_indel_size_values and (any(op in {1, 2, 4} and
+                                                                        length > min_sc_indel_size_values[category] for
+                                                                        op, length in (read.cigartuples or [])))) or \
+                                    (min_mismatch_count_values and (
+                                            nm is not None and nm >= min_mismatch_count_values[category])):
                                 logger.debug(f"Processing read: {read.query_name} with cigartuples {read.cigartuples} ")
                                 # Find the best haplotype for the read
                                 best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(region_haps,
@@ -299,9 +302,10 @@ def parse_args():
     parser.add_argument("--tumor_crams", required=False, nargs='+', type=str, default=None, help="The input tumor CRAM files")
     parser.add_argument("--germline_crams", required=False, nargs='+', type=str, default=None, help="The input germline CRAM files")
     parser.add_argument("--bed_file_regions", required=True, type=str, help="The bed file with the regions to realign")
-    parser.add_argument("--min_sc_indel_size", required=True, type=str, help="Minimum size of an indel and soft-clipping in the read to include the read in the assembly. ;-separated between samples'")
-    parser.add_argument("--min_mismatch_count", required=True, type=str, help="Minimal number of counts to require to include the read in the assembly. ;-separated between samples")
-    parser.add_argument("--min_mapq",required=True, type=int, help="Minimum mapping quality")
+    parser.add_argument("--min_mapq", required=True, type=int, help="Minimum mapping quality")
+    parser.add_argument("--min_sc_indel_size", required=False, type=str, help="Minimum size of an indel and soft-clipping in the read to include the read in the assembly. ;-separated between samples'")
+    parser.add_argument("--min_mismatch_count", required=False, type=str, help="Minimal number of counts to require to include the read in the assembly. ;-separated between samples")
+
 
     args = parser.parse_args()
     return args
@@ -346,20 +350,20 @@ def run():
                 return
 
     # Check if the minimum soft-clipping and indel size is valid
-    min_sc_indel_size = args.min_sc_indel_size.split(";")
-    if (args.tumor_crams and args.germline_crams and len(min_sc_indel_size) != 2) or \
-            ((not args.tumor_crams or not args.germline_crams) and len(min_sc_indel_size) != 1) or \
-            not all(x.isdigit() for x in min_sc_indel_size) or \
-            not all(int(x) >= 0 for x in min_sc_indel_size):
+    min_sc_indel_size = args.min_sc_indel_size.split(";") if args.min_sc_indel_size else None
+    if min_sc_indel_size and (( args.tumor_crams and args.germline_crams and len(min_sc_indel_size) != 2) or
+            ((not args.tumor_crams or not args.germline_crams) and len(min_sc_indel_size) != 1) or
+            not all(x.isdigit() for x in min_sc_indel_size) or
+            not all(int(x) >= 0 for x in min_sc_indel_size)):
         logger.error(f"Minimum soft-clipping and indel size should be a semicolon-separated list of positive integers: {args.min_sc_indel_size}.")
         return
 
     # Check if the minimum mismatch count is valid
-    min_mismatch_count = args.min_mismatch_count.split(";")
-    if (args.tumor_crams and args.germline_crams and len(min_mismatch_count) != 2) or \
-            ((not args.tumor_crams or not args.germline_crams) and len(min_mismatch_count) != 1) or \
-            not all(x.isdigit() for x in min_mismatch_count) or \
-            not all(int(x) >= 0 for x in min_mismatch_count):
+    min_mismatch_count = args.min_mismatch_count.split(";") if args.min_mismatch_count else None
+    if min_mismatch_count and ((args.tumor_crams and args.germline_crams and len(min_mismatch_count) != 2) or
+            ((not args.tumor_crams or not args.germline_crams) and len(min_mismatch_count) != 1) or
+            not all(x.isdigit() for x in min_mismatch_count) or
+            not all(int(x) >= 0 for x in min_mismatch_count)):
         logger.error(f"Minimum mismatch count should be a semicolon-separated list of positive integers: {args.min_mismatch_count}.")
         return
 
