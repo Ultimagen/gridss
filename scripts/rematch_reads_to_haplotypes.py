@@ -324,11 +324,7 @@ def run():
     if not os.path.exists(args.reference):
         logger.error(f"Reference file {args.reference} does not exist.")
         return
-
-    # Check if the output path is valid
-    if not os.path.isdir(os.path.dirname(args.output)):
-        logger.error(f"Output directory {os.path.dirname(args.output)} does not exist.")
-        return
+        
 
     # Check if the bed file exists
     if not os.path.exists(args.bed_file_regions):
