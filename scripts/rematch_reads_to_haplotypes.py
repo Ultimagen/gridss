@@ -184,6 +184,13 @@ def find_best_haplotype(region_haps, read, reference):
 
     return best_hap, best_score, best_start_point, best_end_point, affected_haps
 
+def count_mismatches(md_tag):
+    # Remove deletion segments (^...) from MD string
+    md_clean = re.sub(r'\^[A-Z]+', '', md_tag)
+    # Find all letters that represent mismatches
+    mismatches = re.findall(r'[A-Z]', md_clean)
+    return len(mismatches)
+
 def rematch_reads_to_haplotypes_in_contig(assembly_path, tumor_crams, germline_crams, reference_path, bed_file_regions, min_sc_indel_size, min_mismatch_count, min_mapq, contig, output_path):
     """
     Rematch reads to haplotypes in a given assembly file.
@@ -210,8 +217,8 @@ def rematch_reads_to_haplotypes_in_contig(assembly_path, tumor_crams, germline_c
     else: # if only one type of CRAM files is provided
         crams_array = [(cram, 0) for cram in (tumor_crams or [])] + [(cram, 0) for cram in (germline_crams or [])]
 
-    min_sc_indel_size_values = [int(x) for x in min_sc_indel_size.split(";")]
-    min_mismatch_count_values = [int(x) for x in min_mismatch_count.split(";")]
+    min_sc_indel_size_values = [int(x) for x in min_sc_indel_size.split(";")] if min_sc_indel_size else None
+    min_mismatch_count_values = [int(x) for x in min_mismatch_count.split(";")] if min_mismatch_count else None
     for cram_file, category in crams_array:
         logger.debug(f"Processing {cram_file} with category {category}")
         # open the CRAM file for fetching the reads
@@ -230,11 +237,12 @@ def rematch_reads_to_haplotypes_in_contig(assembly_path, tumor_crams, germline_c
                         for read in reads_cram.fetch(chrom, start, end):
 
                             mapq = read.mapping_quality
-                            # NA is the number of mismatches in the read
-                            try:
-                                nm = read.get_tag("NM")
-                            except KeyError:
-                                nm = None
+                            # The MD tag encodes the positions of mismatches in the alignment compared to the reference
+                            if read.has_tag("MD"):
+                                md = read.get_tag("MD")
+                                mismatch_count = count_mismatches(md)
+                            else:
+                                mismatch_count = None
                             # Exclude PCR/optical duplicates, low mapping quality reads, and reads with small number of mismatches
                             if (not read.is_duplicate) and (mapq > min_mapq) and \
                                     (not min_sc_indel_size_values and not min_mismatch_count_values) or \
@@ -242,7 +250,7 @@ def rematch_reads_to_haplotypes_in_contig(assembly_path, tumor_crams, germline_c
                                                                         length > min_sc_indel_size_values[category] for
                                                                         op, length in (read.cigartuples or [])))) or \
                                     (min_mismatch_count_values and (
-                                            nm is not None and nm >= min_mismatch_count_values[category])):
+                                            mismatch_count is not None and mismatch_count >= min_mismatch_count_values[category])):
                                 logger.debug(f"Processing read: {read.query_name} with cigartuples {read.cigartuples} ")
                                 # Find the best haplotype for the read
                                 best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(region_haps,
@@ -324,7 +332,7 @@ def run():
     if not os.path.exists(args.reference):
         logger.error(f"Reference file {args.reference} does not exist.")
         return
-        
+
 
     # Check if the bed file exists
     if not os.path.exists(args.bed_file_regions):
