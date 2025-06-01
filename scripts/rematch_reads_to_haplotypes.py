@@ -245,12 +245,12 @@ def rematch_reads_to_haplotypes_in_contig(assembly_path, tumor_crams, germline_c
                                 mismatch_count = None
                             # Exclude PCR/optical duplicates, low mapping quality reads, and reads with small number of mismatches
                             if (not read.is_duplicate) and (mapq > min_mapq) and \
-                                    (not min_sc_indel_size_values and not min_mismatch_count_values) or \
+                                    ((not min_sc_indel_size_values and not min_mismatch_count_values) or
                                     (min_sc_indel_size_values and (any(op in {1, 2, 4} and
                                                                         length > min_sc_indel_size_values[category] for
-                                                                        op, length in (read.cigartuples or [])))) or \
+                                                                        op, length in (read.cigartuples or [])))) or
                                     (min_mismatch_count_values and (
-                                            mismatch_count is not None and mismatch_count >= min_mismatch_count_values[category])):
+                                            mismatch_count is not None and mismatch_count >= min_mismatch_count_values[category]))):
                                 logger.debug(f"Processing read: {read.query_name} with cigartuples {read.cigartuples} ")
                                 # Find the best haplotype for the read
                                 best_hap, best_score, start_point, end_point, affected_haps = find_best_haplotype(region_haps,
