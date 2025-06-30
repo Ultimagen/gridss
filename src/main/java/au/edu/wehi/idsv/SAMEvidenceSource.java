@@ -287,7 +287,7 @@ public class SAMEvidenceSource extends EvidenceSource {
 		}
 	}
 	private Iterator<DirectedEvidence> asEvidence(Iterator<SAMRecord> it, EvidenceSortOrder eso) {
-		it = new BufferedIterator<>(it, 2); // TODO: remove when https://github.com/samtools/htsjdk/issues/760 is resolved
+		it = new BufferedIterator<>(it, 2000); // TODO: remove when https://github.com/samtools/htsjdk/issues/760 is resolved
 		it = Iterators.filter(it, r -> !shouldFilterPreTransform(r));
 		if (Defaults.SANITY_CHECK_DUMP_ITERATORS) {
 			it = new AutoClosingIterator<>(new DebugSpammingIterator<>(it, "SAMEvidenceSource.shouldFilterPreTransform"));
