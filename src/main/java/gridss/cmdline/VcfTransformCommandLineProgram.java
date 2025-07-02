@@ -58,8 +58,7 @@ public abstract class VcfTransformCommandLineProgram extends FullEvidenceCommand
 		}
 		log.info("Annotating variants in " + INPUT_VCF);
 		try (CloseableIterator<VariantContextDirectedEvidence> it = iterator(getBreakends(INPUT_VCF), threadpool)) {
-			getAllCalls(INPUT_VCF, it);
-			//saveVcf(OUTPUT_VCF, getAllCalls(INPUT_VCF, it));
+			saveVcf(OUTPUT_VCF, getAllCalls(INPUT_VCF, it));//
 		}
 		log.info("Annotated variants written to " + OUTPUT_VCF);
 		return 0;
@@ -92,7 +91,7 @@ public abstract class VcfTransformCommandLineProgram extends FullEvidenceCommand
 		try (VariantContextWriter vcfWriter = getContext().getVariantContextWriter(tmp, getOutputHeader(), true)) {
 			while (calls.hasNext()) {
 				IdsvVariantContext record = calls.next();
-				vcfWriter.add(record);
+				//vcfWriter.add(record);
 				writeProgress.record(record.getContig(), record.getStart());
 			}
 		}
