@@ -89,11 +89,11 @@ public abstract class VcfTransformCommandLineProgram extends FullEvidenceCommand
 		File tmp = gridss.Defaults.OUTPUT_TO_TEMP_FILE ? FileSystemContext.getWorkingFileFor(file) : file;
 		final ProgressLogger writeProgress = new ProgressLogger(log);
 		try (VariantContextWriter vcfWriter = getContext().getVariantContextWriter(tmp, getOutputHeader(), true)) {
-			while (calls.hasNext()) {
-				//IdsvVariantContext record = calls.next();
-				//vcfWriter.add(record);
-				//writeProgress.record(record.getContig(), record.getStart());
-			}
+//			while (calls.hasNext()) {
+//				//IdsvVariantContext record = calls.next();
+//				//vcfWriter.add(record);
+//				//writeProgress.record(record.getContig(), record.getStart());
+//			}
 		}
 		if (tmp != file) {
 			FileHelper.move(tmp, file, true);
