@@ -90,9 +90,9 @@ public abstract class VcfTransformCommandLineProgram extends FullEvidenceCommand
 		final ProgressLogger writeProgress = new ProgressLogger(log);
 		try (VariantContextWriter vcfWriter = getContext().getVariantContextWriter(tmp, getOutputHeader(), true)) {
 			while (calls.hasNext()) {
-				IdsvVariantContext record = calls.next();
+				//IdsvVariantContext record = calls.next();
 				//vcfWriter.add(record);
-				writeProgress.record(record.getContig(), record.getStart());
+				//writeProgress.record(record.getContig(), record.getStart());
 			}
 		}
 		if (tmp != file) {
