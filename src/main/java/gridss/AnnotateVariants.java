@@ -61,9 +61,9 @@ public class AnnotateVariants extends VcfTransformCommandLineProgram {
 		copyInputs(arc);
 		copyInputs(ihom);
 		ae.INPUT_VCF = INPUT_VCF; // needed for caching 
-		calls = new AsyncBufferedIterator<VariantContextDirectedEvidence>(ae.iterator(calls, threadpool), 128, 2, "AllocateEvidence");
+		calls = ae.iterator(calls, threadpool); //new AsyncBufferedIterator<VariantContextDirectedEvidence>(ae.iterator(calls, threadpool), 128, 2, "AllocateEvidence");
 		//List<VariantContextDirectedEvidence> callsList = calls.stream().collect(Collectors.toList());
-		calls = new AsyncBufferedIterator<VariantContextDirectedEvidence>(arc.iterator(calls, threadpool), 128, 2, "AnnotateReferenceCoverage");
+		calls = arc.iterator(calls, threadpool); //new AsyncBufferedIterator<VariantContextDirectedEvidence>(arc.iterator(calls, threadpool), 128, 2, "AnnotateReferenceCoverage");
 
 		calls = ihom.iterator(calls, threadpool);
 		AnnotateAlleleFraction aaf = new AnnotateAlleleFraction(new AlleleFractionAnnotator(getContext(), getSamEvidenceSources()));

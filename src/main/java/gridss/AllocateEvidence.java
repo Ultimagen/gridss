@@ -75,9 +75,9 @@ public class AllocateEvidence extends VcfTransformCommandLineProgram {
 	@Override
 	public CloseableIterator<VariantContextDirectedEvidence> iterator(CloseableIterator<VariantContextDirectedEvidence> calls, ExecutorService threadpool) {
 		log.info("Allocating evidence"); 
-		CloseableIterator<DirectedEvidence> rawReads = new AsyncBufferedIterator<>(getReadIterator(), "mergedReads-allocation");
-		CloseableIterator<DirectedEvidence> reads = new AsyncBufferedIterator<>(annotateAssembly(rawReads), "annotate-associated-assembly");
-		CloseableIterator<DirectedEvidence> assemblies = new AsyncBufferedIterator<>(getAssemblyIterator(), "assembly-allocation");
+		CloseableIterator<DirectedEvidence> rawReads = getReadIterator();//new AsyncBufferedIterator<>(getReadIterator(), "mergedReads-allocation");
+		CloseableIterator<DirectedEvidence> reads = annotateAssembly(rawReads);//new AsyncBufferedIterator<>(annotateAssembly(rawReads), "annotate-associated-assembly");
+		CloseableIterator<DirectedEvidence> assemblies = getAssemblyIterator();//new AsyncBufferedIterator<>(getAssemblyIterator(), "assembly-allocation");
 
 		Iterator<VariantEvidenceSupport> annotator = new SequentialEvidenceAllocator(getContext(), calls, reads, assemblies, SAMEvidenceSource.maximumWindowSize(getContext(), getSamEvidenceSources(), getAssemblySource()), true);
 		CloseableIterator<VariantEvidenceSupport> bufferedAnnotator = new AsyncBufferedIterator<>(annotator, "annotator", 2, 8);
