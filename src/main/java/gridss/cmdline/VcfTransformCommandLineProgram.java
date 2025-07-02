@@ -82,18 +82,18 @@ public abstract class VcfTransformCommandLineProgram extends FullEvidenceCommand
 		Iterator<IdsvVariantContext> nonbeIt = Iterators.filter(idsvIt, variant -> !(variant instanceof VariantContextDirectedEvidence));
 		// sort back to nominal VCF position
 		Iterator<VariantContextDirectedEvidence> bpit = new VariantContextWindowedSortingIterator<>(getContext(), SAMEvidenceSource.maximumWindowSize(getContext(), getSamEvidenceSources(), getAssemblySource()), breakendCalls);
-		Iterator<IdsvVariantContext> mergedIt = DeterministicIterators.mergeSorted(ImmutableList.of(bpit, nonbeIt), IdsvVariantContext.ByLocationStart);
-		return new AutoClosingIterator<>(mergedIt, vcfReader, it);
+		//Iterator<IdsvVariantContext> mergedIt = DeterministicIterators.mergeSorted(ImmutableList.of(bpit, nonbeIt), IdsvVariantContext.ByLocationStart);
+		return new AutoClosingIterator<>(bpit, vcfReader, it);
 	}
 	protected void saveVcf(File file, Iterator<IdsvVariantContext> calls) throws IOException {
 		File tmp = gridss.Defaults.OUTPUT_TO_TEMP_FILE ? FileSystemContext.getWorkingFileFor(file) : file;
 		final ProgressLogger writeProgress = new ProgressLogger(log);
 		try (VariantContextWriter vcfWriter = getContext().getVariantContextWriter(tmp, getOutputHeader(), true)) {
-//			while (calls.hasNext()) {
-//				//IdsvVariantContext record = calls.next();
-//				//vcfWriter.add(record);
-//				//writeProgress.record(record.getContig(), record.getStart());
-//			}
+			while (calls.hasNext()) {
+				IdsvVariantContext record = calls.next();
+				vcfWriter.add(record);
+				writeProgress.record(record.getContig(), record.getStart());
+			}
 		}
 		if (tmp != file) {
 			FileHelper.move(tmp, file, true);
