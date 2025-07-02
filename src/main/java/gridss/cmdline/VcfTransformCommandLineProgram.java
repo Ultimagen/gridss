@@ -58,7 +58,8 @@ public abstract class VcfTransformCommandLineProgram extends FullEvidenceCommand
 		}
 		log.info("Annotating variants in " + INPUT_VCF);
 		try (CloseableIterator<VariantContextDirectedEvidence> it = iterator(getBreakends(INPUT_VCF), threadpool)) {
-			saveVcf(OUTPUT_VCF, getAllCalls(INPUT_VCF, it));
+			getAllCalls(INPUT_VCF, it);
+			//saveVcf(OUTPUT_VCF, getAllCalls(INPUT_VCF, it));
 		}
 		log.info("Annotated variants written to " + OUTPUT_VCF);
 		return 0;
