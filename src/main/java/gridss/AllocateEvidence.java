@@ -79,11 +79,11 @@ public class AllocateEvidence extends VcfTransformCommandLineProgram {
 		CloseableIterator<DirectedEvidence> reads = annotateAssembly(rawReads);//new AsyncBufferedIterator<>(annotateAssembly(rawReads), "annotate-associated-assembly");
 		CloseableIterator<DirectedEvidence> assemblies = getAssemblyIterator();//new AsyncBufferedIterator<>(getAssemblyIterator(), "assembly-allocation");
 
-		Iterator<VariantEvidenceSupport> annotator = new SequentialEvidenceAllocator(getContext(), calls, reads, assemblies, SAMEvidenceSource.maximumWindowSize(getContext(), getSamEvidenceSources(), getAssemblySource()), true);
-		CloseableIterator<VariantEvidenceSupport> bufferedAnnotator = new AsyncBufferedIterator<>(annotator, "annotator", 2, 8);
-		Iterator<VariantContextDirectedEvidence> it = Iterators.transform(bufferedAnnotator, bp -> annotate(bp));
-		it = Iterators.filter(it, v -> v != null);
-		return new AutoClosingIterator<>(it, calls, rawReads, reads, assemblies, bufferedAnnotator);
+		//Iterator<VariantEvidenceSupport> annotator = new SequentialEvidenceAllocator(getContext(), calls, reads, assemblies, SAMEvidenceSource.maximumWindowSize(getContext(), getSamEvidenceSources(), getAssemblySource()), true);
+		//CloseableIterator<VariantEvidenceSupport> bufferedAnnotator = new AsyncBufferedIterator<>(annotator, "annotator", 2, 8);
+		//Iterator<VariantContextDirectedEvidence> it = Iterators.transform(annotator, bp -> annotate(bp));
+		//it = Iterators.filter(it, v -> v != null);
+		return new AutoClosingIterator<>(calls, calls, rawReads, reads, assemblies);//, bufferedAnnotator);
 	}
 	private CloseableIterator<DirectedEvidence> annotateAssembly(CloseableIterator<DirectedEvidence> it) {
 		List<Closeable> assToClose = new ArrayList<>();
