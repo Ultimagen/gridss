@@ -81,9 +81,9 @@ public abstract class VcfTransformCommandLineProgram extends FullEvidenceCommand
 		Iterator<IdsvVariantContext> idsvIt = Iterators.transform(it, variant -> IdsvVariantContext.create(getContext().getDictionary(), null, variant));
 		Iterator<IdsvVariantContext> nonbeIt = Iterators.filter(idsvIt, variant -> !(variant instanceof VariantContextDirectedEvidence));
 		// sort back to nominal VCF position
-		Iterator<VariantContextDirectedEvidence> bpit = new VariantContextWindowedSortingIterator<>(getContext(), SAMEvidenceSource.maximumWindowSize(getContext(), getSamEvidenceSources(), getAssemblySource()), breakendCalls);
-		//Iterator<IdsvVariantContext> mergedIt = DeterministicIterators.mergeSorted(ImmutableList.of(bpit, nonbeIt), IdsvVariantContext.ByLocationStart);
-		return new AutoClosingIterator<>(bpit, vcfReader, it);
+		//Iterator<VariantContextDirectedEvidence> bpit = new VariantContextWindowedSortingIterator<>(getContext(), SAMEvidenceSource.maximumWindowSize(getContext(), getSamEvidenceSources(), getAssemblySource()), breakendCalls);
+		Iterator<IdsvVariantContext> mergedIt = DeterministicIterators.mergeSorted(ImmutableList.of(nonbeIt), IdsvVariantContext.ByLocationStart);
+		return new AutoClosingIterator<>(mergedIt, vcfReader, it);
 	}
 	protected void saveVcf(File file, Iterator<IdsvVariantContext> calls) throws IOException {
 		File tmp = gridss.Defaults.OUTPUT_TO_TEMP_FILE ? FileSystemContext.getWorkingFileFor(file) : file;
