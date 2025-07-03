@@ -13,9 +13,8 @@ import java.util.stream.IntStream;
 public class DeterministicIterators {
     public static <T> Iterator<T> mergeSorted(Iterable<? extends Iterator<? extends T>> iterators, Comparator<? super T> comparator) {
         List<Iterator<? extends T>> lit = Lists.newArrayList(iterators);
-        List<Iterator<Record<T>>> rits = IntStream.range(0, lit.size()).mapToObj(i -> new RecordPackingIterator<T>(i, lit.get(i))).collect(Collectors.toList());
-        UnmodifiableIterator<Record<T>> mergedit = Iterators.mergeSorted(rits, recordComparator(comparator));
-        return new RecordUnpackingIterator<T>(mergedit);
+        return Iterators.mergeSorted(lit, comparator);
+
     }
     private static class RecordPackingIterator<T> implements Iterator<Record<T>> {
         private final int iteratorIndex;
