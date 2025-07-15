@@ -221,7 +221,8 @@ public class SAMEvidenceSource extends EvidenceSource {
 		// expand query bounds as the alignment for a discordant read pair could fall before or after the breakend interval we are extracting
 		QueryInterval[] expandedIntervals = QueryIntervalUtil.padIntervals(getContext().getDictionary(), intervals, getMaxConcordantFragmentSize() + 1);
 		// ignore blacklisted regions
-		IntervalBed queryInterval = new IntervalBed(getContext().getLinear(), expandedIntervals);
+		// todo: what about the padding?
+		IntervalBed queryInterval = getIntervalRegions();
 		queryInterval.remove(getBlacklistedRegions());
 		CloseableIterator it = tryOpenReader(reader, queryInterval.asQueryInterval());
 		if (Defaults.SANITY_CHECK_DUMP_ITERATORS) {
@@ -336,7 +337,8 @@ public class SAMEvidenceSource extends EvidenceSource {
 		SAMRecordUtil.lowMapqToUnmapped(r, getContext().getConfig().minMapq);
 		// Converts overlaps of blacklisted regions to unmapped
 		if (!r.getReadUnmappedFlag()) {
-			if (getBlacklistedRegions().overlaps(r.getReferenceIndex(), r.getAlignmentStart(), r.getAlignmentEnd())) {
+			if (getBlacklistedRegions().overlaps(r.getReferenceIndex(), r.getAlignmentStart(), r.getAlignmentEnd()) ||
+					(!getIntervalRegions().overlaps(r.getReferenceIndex(), r.getAlignmentStart(), r.getAlignmentEnd()))) {
 				r.setReadUnmappedFlag(true);
 			}
 		}
@@ -348,7 +350,7 @@ public class SAMEvidenceSource extends EvidenceSource {
 			if (mateCigar != null) {
 				mateEnd += mateCigar.getReferenceLength() - 1;
 			}
-			if (getBlacklistedRegions().overlaps(mateRef, mateStart, mateEnd)) {
+			if (getBlacklistedRegions().overlaps(mateRef, mateStart, mateEnd) || !getIntervalRegions().overlaps(mateRef, mateStart, mateEnd)) {
 				r.setMateUnmappedFlag(true);
 			}
 		}
@@ -361,6 +363,10 @@ public class SAMEvidenceSource extends EvidenceSource {
 			r.setAttribute(SAMTag.SA.name(), ChimericAlignment.getChimericAlignments(r).stream()
 					.filter(ca -> isInReference(r, ca, dict))
 					.filter(ca -> !getBlacklistedRegions().overlaps(
+							dict.getSequence(ca.rname).getSequenceIndex(),
+							ca.pos,
+							ca.pos + ca.cigar.getReferenceLength() - 1))
+					.filter(ca -> getIntervalRegions().overlaps(
 							dict.getSequence(ca.rname).getSequenceIndex(),
 							ca.pos,
 							ca.pos + ca.cigar.getReferenceLength() - 1))
@@ -459,6 +465,14 @@ public class SAMEvidenceSource extends EvidenceSource {
 			}
 		}
 		return blacklist;
+	}
+
+	private IntervalBed interval = null;
+	public IntervalBed getIntervalRegions() {
+		if (interval == null) {
+			interval = new IntervalBed(getContext().getLinear());
+		}
+		return interval;
 	}
 	// Exposed mostly for testing purposes
 	protected void setBlacklistedRegions(IntervalBed blacklist) {

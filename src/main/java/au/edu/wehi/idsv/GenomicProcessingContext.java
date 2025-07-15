@@ -48,6 +48,8 @@ public class GenomicProcessingContext implements Closeable {
 	private final SAMFileHeader basicHeader;
 	private File blacklistFile;
 	private IntervalBed blacklist;
+	private File intervalFile;
+	private IntervalBed interval;
 	private boolean filterDuplicates = true;
 	private int workerThreads = 1;
 	/**
@@ -320,6 +322,18 @@ public class GenomicProcessingContext implements Closeable {
 		}
 		this.blacklistFile = blacklistFile;
 		this.blacklist = new IntervalBed(getLinear(), blacklistFile);
+	}
+
+	public File getInterval() {
+		return intervalFile;
+	}
+
+	public void setInterval(File intervalFile) throws IOException {
+		if (!intervalFile.exists()) {
+			throw new IllegalArgumentException(String.format("Missing file %s", intervalFile));
+		}
+		this.intervalFile = intervalFile;
+		this.interval = new IntervalBed(getLinear(), intervalFile);
 	}
 	
 	public CommandLineProgram getCommandLineProgram() {

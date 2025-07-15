@@ -59,6 +59,8 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
     		+ "and if such regions are to be filtered in downstream analysis anyway, blacklisting those region will improve runtime "
     		+ "performance. For human WGS, the ENCODE DAC blacklist is recommended.", optional=true)
     public File BLACKLIST = null;
+	@Argument(shortName="INT", doc = "BED interval of regions to include.", optional=true)
+	public File INTERVAL = null;
     // --- evidence filtering parameters ---
     @Argument(shortName="C", doc = "gridss configuration file containing overrides", optional=true)
     public File CONFIGURATION_FILE = null;
@@ -259,6 +261,14 @@ public abstract class MultipleSamFileCommandLineProgram extends ReferenceCommand
 					processContext.setBlacklist(BLACKLIST);
 				} catch (IOException e) {
 					log.error(e, "Error loading BED blacklist. ", BLACKLIST);
+					throw new RuntimeException(e);
+				}
+			}
+			if (INTERVAL != null) {
+				try {
+					processContext.setInterval(INTERVAL);
+				} catch (IOException e) {
+					log.error(e, "Error loading BED interval. ", INTERVAL);
 					throw new RuntimeException(e);
 				}
 			}
