@@ -103,7 +103,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
 		libtiff5-dev \
 		libjpeg-dev \
 		unixodbc-dev \
+        libncurses5-dev \
+        libncursesw5-dev \
 	&& rm -rf /var/lib/apt/lists/*
+
 # samtools needs to be installed from source since the OS package verion is too old
 RUN mkdir /opt/samtools && \
 	cd /opt/samtools && \
