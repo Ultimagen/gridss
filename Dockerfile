@@ -18,6 +18,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
 	autotools-dev \
 	autoconf \
 	autogen \
+	automake \
+	libtool \
 	make \
 	wget \
 	libomp-dev \
