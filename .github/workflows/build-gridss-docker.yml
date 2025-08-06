@@ -31,6 +31,25 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Trivy Docker scan
+        uses: aquasecurity/trivy-action@0.32.0
+        with:
+          scan-type: 'config'
+          scan-ref: './'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          
+      
+      - name: Trivy fs scan
+        uses: aquasecurity/trivy-action@0.32.0
+        with:
+          scan-type: 'fs'
+          scan-ref: './'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          
       - uses: benjlevesque/short-sha@v2.2
         id: short-sha
         with:

@@ -5,8 +5,8 @@ RUN sed -i -e 's/http:\/\/archive\.ubuntu\.com\/ubuntu\//mirror:\/\/mirrors\.ubu
 
 # Set up a C build environment for gridsstools, samtools, and R packages
 FROM gridss_base_closest_mirror AS gridss_c_build_environment
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y ca-certificates
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
 	libssl-dev \
 	libcurl4-openssl-dev \
 	libxml2-dev \
@@ -18,6 +18,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 	autotools-dev \
 	autoconf \
 	autogen \
+	automake \
+	libtool \
 	make \
 	wget \
 	libomp-dev \
@@ -60,7 +62,7 @@ RUN mvn -T 1C -Drevision=${GRIDSS_VERSION} package -Dmaven.test.skip=true && \
 FROM gridss_c_build_environment AS gridss
 # Setup CRAN ubuntu package repository
 # apt-get clean not required for ubuntu images
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
 		apt-transport-https \
 		software-properties-common \
 		dirmngr \
@@ -69,7 +71,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 	--keyserver hkp://keyserver.ubuntu.com:80 \
 	--recv-keys 0xE298A3A825C0D65DFD57CBB651716619E084DAB9 && \
 	add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' && \
-	apt-get update && apt-get install -y \
+	apt-get update && apt-get install --no-install-recommends -y \
 		apt-utils \
 		gawk \
 		openjdk-17-jre-headless \
@@ -101,7 +103,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
 		libtiff5-dev \
 		libjpeg-dev \
 		unixodbc-dev \
+        libncurses5-dev \
+        libncursesw5-dev \
 	&& rm -rf /var/lib/apt/lists/*
+
 # samtools needs to be installed from source since the OS package verion is too old
 RUN mkdir /opt/samtools && \
 	cd /opt/samtools && \
