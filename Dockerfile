@@ -211,6 +211,8 @@ RUN chmod +x /opt/gridss/* && \
 RUN groupadd gridss && useradd -m gridss -g gridss
 RUN chown -R gridss:gridss /opt/gridss /data/
 
+USER gridss
+
 WORKDIR /data/
 
 # Include licenses
