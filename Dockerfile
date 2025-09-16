@@ -207,6 +207,10 @@ COPY scripts/gridss \
 	/opt/gridss/
 RUN chmod +x /opt/gridss/* && \
 	chmod -x /opt/gridss/*.R
+
+RUN groupadd gridss && useradd -m gridss -g gridss
+RUN chown -R gridss:gridss /opt/gridss /data/
+
 WORKDIR /data/
 
 # Include licenses
