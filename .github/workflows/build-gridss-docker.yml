@@ -11,18 +11,20 @@ on:
 permissions:
   id-token: write # Required for assuming an AWS role
   contents: read # Required for actions/checkout
-
+env:
+  GCP_WORKLOAD_IDENTITY_PROVIDER: projects/55428976747/locations/global/workloadIdentityPools/devops-pool/providers/devops-pool-provider
+  GCP_SERVICE_ACCOUNT: gcr-push-sa@ultima-data-307918.iam.gserviceaccount.com
 jobs:
   pre-build:
     runs-on: ubuntu-latest
     steps:
-      # - name: Authenticate to Google Cloud
-      #   id: auth
-      #   uses: google-github-actions/auth@v2
-      #   with:
-      #     token_format: access_token
-      #     workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-      #     service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
       - name: Install gsutil 
         uses: 'google-github-actions/setup-gcloud@v1'
         with:
