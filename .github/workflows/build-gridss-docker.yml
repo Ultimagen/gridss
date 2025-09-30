@@ -13,7 +13,28 @@ permissions:
   contents: read # Required for actions/checkout
 
 jobs:
+  pre-build:
+    runs-on: ubuntu-latest
+    steps:
+      # - name: Authenticate to Google Cloud
+      #   id: auth
+      #   uses: google-github-actions/auth@v2
+      #   with:
+      #     token_format: access_token
+      #     workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      #     service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+      - name: Install gsutil 
+        uses: 'google-github-actions/setup-gcloud@v1'
+        with:
+          version: '>= 363.0.0'
+
+      - name: Download resources
+        run: |
+          gsutil cp gs://concordance-data/scripts/RepeatMasker-4.1.2-p1.tar.gz .
+          gsutil cp gs://concordance-data/scripts/rmblast-2.14.1+-x64-linux.tar.gz .
+          
   build:
+    needs: [pre-build]
     uses: Ultimagen/ugbio-utils/.github/workflows/docker-build-push.yml@main
     secrets: inherit
     with:
@@ -21,3 +42,4 @@ jobs:
        git-ref: ${{ github.ref_name }}
        docker-image: gridss
        docker-tag: ${{ inputs.docker-tag }}
+       docker-context: ${{ github.workspace }}
