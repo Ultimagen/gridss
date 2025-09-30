@@ -53,3 +53,4 @@ jobs:
        docker-image: gridss
        docker-tag: ${{ inputs.docker-tag }}
        artifact-name: docker-resources
+       docker-context: ${{ github.workspace }}
