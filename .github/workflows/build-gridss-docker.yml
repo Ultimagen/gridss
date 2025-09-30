@@ -32,16 +32,24 @@ jobs:
 
       - name: Download resources
         run: |
-          gsutil cp gs://concordance-data/scripts/RepeatMasker-4.1.2-p1.tar.gz gridss/RepeatMasker-4.1.2-p1.tar.gz
-          gsutil cp gs://concordance-data/scripts/rmblast-2.14.1+-x64-linux.tar.gz gridss/rmblast-2.14.1+-x64-linux.tar.gz
+          gsutil cp gs://concordance-data/scripts/RepeatMasker-4.1.2-p1.tar.gz RepeatMasker-4.1.2-p1.tar.gz
+          gsutil cp gs://concordance-data/scripts/rmblast-2.14.1+-x64-linux.tar.gz rmblast-2.14.1+-x64-linux.tar.gz
+          
+      - name: Upload resources
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-resources
+          path: |
+            RepeatMasker-4.1.2-p1.tar.gz
+            rmblast-2.14.1+-x64-linux.tar.gz
           
   build:
     needs: [pre-build]
-    uses: Ultimagen/ugbio-utils/.github/workflows/docker-build-push.yml@main
+    uses: Ultimagen/ugbio-utils/.github/workflows/docker-build-push.yml@upload-artifact
     secrets: inherit
     with:
        git-repo: ${{ github.repository }}
        git-ref: ${{ github.ref_name }}
        docker-image: gridss
        docker-tag: ${{ inputs.docker-tag }}
-       docker-context: gridss
+       docker-context: ${{ github.workspace }}
