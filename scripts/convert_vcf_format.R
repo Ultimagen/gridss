@@ -97,7 +97,7 @@ end_header <- DataFrame(
 
 # Create a new header line for the SVLEN field
 svlen_header <- DataFrame(
-  Number = "1",
+  Number = "A",
   Type = "Integer",
   Description = "Difference in length between REF and ALT alleles",
   row.names = "SVLEN"
