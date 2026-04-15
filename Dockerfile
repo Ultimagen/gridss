@@ -187,7 +187,7 @@ RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/", warn=2);
 	}'
 RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/", warn=2); \
 	library(BiocManager); \
-	packages <- c("copynumber", "StructuralVariantAnnotation", "VariantAnnotation", "rtracklayer", "BSgenome", "Rsamtools", "biomaRt", "org.Hs.eg.db", "TxDb.Hsapiens.UCSC.hg19.knownGene", "TxDb.Hsapiens.UCSC.hg38.knownGene"); \
+	packages <- c("StructuralVariantAnnotation", "VariantAnnotation", "rtracklayer", "BSgenome", "Rsamtools", "biomaRt", "org.Hs.eg.db", "TxDb.Hsapiens.UCSC.hg19.knownGene", "TxDb.Hsapiens.UCSC.hg38.knownGene"); \
 	BiocManager::install(ask=FALSE, pkgs=packages); \
 	failed <- packages[!packages %in% installed.packages()[,"Package"]]; \
 	if(length(failed) > 0) { \
