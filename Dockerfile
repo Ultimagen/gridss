@@ -102,9 +102,11 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
 		libpng-dev \
 		libtiff5-dev \
 		libjpeg-dev \
+		libwebp-dev \
 		unixodbc-dev \
         libncurses5-dev \
         libncursesw5-dev \
+		gfortran \
 	&& rm -rf /var/lib/apt/lists/*
 
 # samtools needs to be installed from source since the OS package verion is too old
@@ -174,8 +176,23 @@ RUN cd /opt/RepeatMasker && \
 		-hmmer_dir /usr/local/bin
 # R packages used by GRIDSS - R package need the C toolchain installed
 ENV R_INSTALL_STAGED=false
-RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/");install.packages(c( "tidyverse", "assertthat", "testthat", "randomForest", "stringdist", "stringr", "argparser", "R.cache", "BiocManager", "Rcpp", "blob", "RSQLite", "pbapply"))'
-RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/");BiocManager::install(ask=FALSE, pkgs=c( "copynumber", "StructuralVariantAnnotation", "VariantAnnotation", "rtracklayer", "BSgenome", "Rsamtools", "biomaRt", "org.Hs.eg.db", "TxDb.Hsapiens.UCSC.hg19.knownGene", "TxDb.Hsapiens.UCSC.hg38.knownGene"))'
+RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/", warn=2); \
+	packages <- c("tidyverse", "assertthat", "testthat", "randomForest", "stringdist", "stringr", "argparser", "R.cache", "BiocManager", "Rcpp", "blob", "RSQLite", "pbapply"); \
+	install.packages(packages); \
+	failed <- packages[!packages %in% installed.packages()[,"Package"]]; \
+	if(length(failed) > 0) { \
+		cat("ERROR: Failed to install packages:", paste(failed, collapse=", "), "\n"); \
+		quit(status=1); \
+	}'
+RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/", warn=2); \
+	library(BiocManager); \
+	packages <- c("copynumber", "StructuralVariantAnnotation", "VariantAnnotation", "rtracklayer", "BSgenome", "Rsamtools", "biomaRt", "org.Hs.eg.db", "TxDb.Hsapiens.UCSC.hg19.knownGene", "TxDb.Hsapiens.UCSC.hg38.knownGene"); \
+	BiocManager::install(ask=FALSE, pkgs=packages); \
+	failed <- packages[!packages %in% installed.packages()[,"Package"]]; \
+	if(length(failed) > 0) { \
+		cat("ERROR: Failed to install Bioconductor packages:", paste(failed, collapse=", "), "\n"); \
+		quit(status=1); \
+	}'
 # Install GRIDSS
 ARG GRIDSS_VERSION
 ENV GRIDSS_VERSION=${GRIDSS_VERSION}
