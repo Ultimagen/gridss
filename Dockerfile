@@ -108,6 +108,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
         libncursesw5-dev \
 		gfortran \
 		cmake \
+		liblapack-dev \
+		libblas-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
 # samtools needs to be installed from source since the OS package verion is too old
