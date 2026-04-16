@@ -2,6 +2,7 @@
 library(BiocGenerics, quietly=TRUE, warn.conflicts=FALSE)
 library(S4Vectors, quietly=TRUE, warn.conflicts=FALSE)
 library(IRanges, quietly=TRUE, warn.conflicts=FALSE)
+library(GenomeInfoDb, quietly=TRUE, warn.conflicts=FALSE)
 library(matrixStats, quietly=TRUE, warn.conflicts=FALSE)
 library(DelayedArray, quietly=TRUE, warn.conflicts=FALSE)
 library(XVector, quietly=TRUE, warn.conflicts=FALSE)
