@@ -1,0 +1,50 @@
+{
+	"name": "GRIDSS Development",
+	"build": {
+		"dockerfile": "../Dockerfile",
+		"context": "..",
+		"target": "gridss",
+		"args": {
+			"GRIDSS_VERSION": "2.13.2",
+			"UBUNTU_VERSION": "22.04"
+		}
+	},
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+	"workspaceFolder": "/workspace",
+	"mounts": [
+		"source=/data/Runs/VariantCalling/work/260416,target=/data/Runs/VariantCalling/work/260416,type=bind",
+		"source=/data/Runs/genomes,target=/data/Runs/genomes,type=bind"
+	],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"vscjava.vscode-java-pack",
+				"vscjava.vscode-maven",
+				"REditorSupport.r",
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"eamodio.gitlens",
+				"EditorConfig.EditorConfig"
+			],
+			"settings": {
+				"java.configuration.updateBuildConfiguration": "automatic",
+				"java.import.gradle.enabled": false,
+				"maven.view": "hierarchical",
+				"r.rterm.linux": "/usr/bin/R",
+				"r.rpath.linux": "/usr/bin/R",
+				"python.defaultInterpreterPath": "/usr/bin/python3",
+				"python.languageServer": "Pylance",
+				"files.watcherExclude": {
+					"**/target/**": true
+				}
+			}
+		}
+	},
+	"postCreateCommand": "bash /workspace/.devcontainer/post-create.sh",
+	"remoteUser": "root",
+	"runArgs": [
+		"--cpus=4",
+		"--memory=8g"
+	],
+	"features": {}
+}

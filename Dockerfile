@@ -1,7 +1,8 @@
-ARG UBUNTU_VERSION=20.04
+ARG UBUNTU_VERSION=22.04
 FROM ubuntu:$UBUNTU_VERSION AS gridss_base_closest_mirror
-# Use the closest mirror so apt-get doesnt take ages
-RUN sed -i -e 's/http:\/\/archive\.ubuntu\.com\/ubuntu\//mirror:\/\/mirrors\.ubuntu\.com\/mirrors\.txt/' /etc/apt/sources.list
+# Configure apt to use AWS EC2 mirrors for faster downloads on AWS infrastructure
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://us-east-1.ec2.archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list && \
+    sed -i 's|http://security.ubuntu.com/ubuntu/|http://us-east-1.ec2.archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
 
 # Set up a C build environment for gridsstools, samtools, and R packages
 FROM gridss_base_closest_mirror AS gridss_c_build_environment
@@ -62,6 +63,9 @@ RUN mvn -T 1C -Drevision=${GRIDSS_VERSION} package -Dmaven.test.skip=true && \
 FROM gridss_c_build_environment AS gridss
 # Setup CRAN ubuntu package repository
 # apt-get clean not required for ubuntu images
+# Pre-configure timezone to prevent interactive prompts
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
 		apt-transport-https \
 		software-properties-common \
@@ -70,7 +74,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
 	apt-key adv \
 	--keyserver hkp://keyserver.ubuntu.com:80 \
 	--recv-keys 0xE298A3A825C0D65DFD57CBB651716619E084DAB9 && \
-	add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu focal-cran40/' && \
+	add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu jammy-cran40/' && \
 	apt-get update && apt-get install --no-install-recommends -y \
 		apt-utils \
 		gawk \
@@ -149,7 +153,7 @@ RUN export GATK_VERSION="4.6.0.0" && \
     rm gatk-${GATK_VERSION}.zip && \
     ln -s /opt/gatk/gatk-${GATK_VERSION}/gatk /usr/local/bin/gatk
 # Install Java
-RUN apt update && apt --yes install default-jdk
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y default-jdk && rm -rf /var/lib/apt/lists/*
 ### Kraken2 and dependencies
 # dustmasker from e-direct: (or is this in ncbi-blast as well?)
 RUN mkdir /opt/blast && \
