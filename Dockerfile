@@ -107,6 +107,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
 		libtiff5-dev \
 		libjpeg-dev \
 		libwebp-dev \
+		libuv1-dev \
 		unixodbc-dev \
         libncurses5-dev \
         libncursesw5-dev \
