@@ -26,3 +26,6 @@ scripts/.RData
 scripts/.Rhistory
 .vscode/launch.json
 .vscode/settings.json
+# Docker build dependencies
+RepeatMasker-4.1.2-p1.tar.gz
+rmblast-2.14.1+-x64-linux.tar.gz

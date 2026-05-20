@@ -74,7 +74,7 @@ vcf_bp$simpleEvent <- simpleEventType(vcf_bp)
 # Initialize a simpleEvent vector with NA to match the length of the original VCF
 simpleEvent <- rep(NA, length(vcf))
 end_positions <- rep(NA, length(vcf))
-svlens <- rep(NA, length(vcf))
+s <- rep(NA, length(vcf))
 
 # Find the matching indices between the original VCF and vcf_bp
 matching_indices <- match(names(vcf), names(vcf_bp))
@@ -83,8 +83,8 @@ write(paste(Sys.time(),"Assign simpleEventType to matching positions"), stderr()
 
 # Assign the simpleEvent information to the matching positions
 simpleEvent[!is.na(matching_indices)] <- vcf_bp$simpleEvent[na.omit(matching_indices)]
-svlens[!is.na(matching_indices)] <- vcf_bp$svLen[na.omit(matching_indices)]
-end_positions[!is.na(matching_indices)] <- start(vcf)[!is.na(matching_indices)] + vcf_bp$svLen[na.omit(matching_indices)]
+s[!is.na(matching_indices)] <- vcf_bp$[na.omit(matching_indices)]
+end_positions[!is.na(matching_indices)] <- start(vcf)[!is.na(matching_indices)] + vcf_bp$[na.omit(matching_indices)]
 write(paste(Sys.time(),"Create Header records"), stderr())
 
 # Create a new header line for the END field
@@ -95,9 +95,9 @@ end_header <- DataFrame(
   row.names = "END"
 )
 
-# Create a new header line for the SVLEN field
-svlen_header <- DataFrame(
-  Number = "1",
+# Create a new header line for the  field
+_header <- DataFrame(
+  Number = ".",
   Type = "Integer",
   Description = "Difference in length between REF and ALT alleles",
   row.names = "SVLEN"
