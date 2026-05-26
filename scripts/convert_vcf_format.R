@@ -83,7 +83,7 @@ write(paste(Sys.time(),"Assign simpleEventType to matching positions"), stderr()
 
 # Assign the simpleEvent information to the matching positions
 simpleEvent[!is.na(matching_indices)] <- vcf_bp$simpleEvent[na.omit(matching_indices)]
-s[!is.na(matching_indices)] <- vcf_bp$[na.omit(matching_indices)]
+svlens[!is.na(matching_indices)] <- vcf_bp$svLen[na.omit(matching_indices)]
 end_positions[!is.na(matching_indices)] <- start(vcf)[!is.na(matching_indices)] + vcf_bp$[na.omit(matching_indices)]
 write(paste(Sys.time(),"Create Header records"), stderr())
 
