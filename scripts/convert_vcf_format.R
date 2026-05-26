@@ -23,19 +23,6 @@ if(!interactive()){
                n_jobs = 1, 
                interval = interval)
 }
-# argv <- list(
-#   input_vcf = "/Users/mayalevy/Downloads/gridss/NA24385_linked.vcf.bgz",
-#   output_vcf = "/Users/mayalevy/Downloads/gridss/modified_vcf.vcf.gz",
-#   ref = "BSgenome.Hsapiens.UCSC.hg38",
-#   n_jobs = -1
-# )
-
-
-# Define the path to your VCF file
-# gs://cromwell-backend-ultima-data-307918/cromwell-execution/SVPipeline/9aaff528-f4e7-439e-b5b5-47ee747e2515/call-GermlineLinkVariants/NA24385_linked.vcf.bgz
-#vcf_file <- "/Users/mayalevy/Downloads/gridss/401882-CL10366-Z0082-CTCTGCTGTGCAATGAT_chr1_linked_orig.vcf.bgz"
-#vcf_file <- "/Users/mayalevy/Downloads/gridss/diploidSV.vcf.gz"
-# gsutil cp modified_vcf_wgs.vcf.bgz gs://ultimagen-users-data/maya/deepvariant/gridss/
 
 
 refgenome = NULL
@@ -74,7 +61,7 @@ vcf_bp$simpleEvent <- simpleEventType(vcf_bp)
 # Initialize a simpleEvent vector with NA to match the length of the original VCF
 simpleEvent <- rep(NA, length(vcf))
 end_positions <- rep(NA, length(vcf))
-s <- rep(NA, length(vcf))
+svlens <- rep(NA, length(vcf))
 
 # Find the matching indices between the original VCF and vcf_bp
 matching_indices <- match(names(vcf), names(vcf_bp))
@@ -84,7 +71,7 @@ write(paste(Sys.time(),"Assign simpleEventType to matching positions"), stderr()
 # Assign the simpleEvent information to the matching positions
 simpleEvent[!is.na(matching_indices)] <- vcf_bp$simpleEvent[na.omit(matching_indices)]
 svlens[!is.na(matching_indices)] <- vcf_bp$svLen[na.omit(matching_indices)]
-end_positions[!is.na(matching_indices)] <- start(vcf)[!is.na(matching_indices)] + vcf_bp$[na.omit(matching_indices)]
+end_positions[!is.na(matching_indices)] <- start(vcf)[!is.na(matching_indices)] + vcf_bp$svLen[na.omit(matching_indices)]
 write(paste(Sys.time(),"Create Header records"), stderr())
 
 # Create a new header line for the END field
@@ -96,7 +83,7 @@ end_header <- DataFrame(
 )
 
 # Create a new header line for the  field
-_header <- DataFrame(
+svlen_header <- DataFrame(
   Number = ".",
   Type = "Integer",
   Description = "Difference in length between REF and ALT alleles",
