@@ -51,6 +51,6 @@ jobs:
        git-repo: ${{ github.repository }}
        git-ref: ${{ github.ref_name }}
        docker-image: gridss
-       docker-tag: ${{ inputs.docker-tag }}
+       docker-tag: ${{ inputs.image-tag }}
        artifact-name: docker-resources
        docker-target: gridss
