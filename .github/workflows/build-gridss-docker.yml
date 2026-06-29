@@ -11,38 +11,14 @@ on:
 permissions:
   id-token: write # Required for assuming an AWS role
   contents: read # Required for actions/checkout
-env:
-  GCP_WORKLOAD_IDENTITY_PROVIDER: projects/55428976747/locations/global/workloadIdentityPools/devops-pool/providers/devops-pool-provider
-  GCP_SERVICE_ACCOUNT: gcr-push-sa@ultima-data-307918.iam.gserviceaccount.com
+
 jobs:
   pre-build:
     runs-on: ubuntu-latest
     steps:
-      - name: Authenticate to Google Cloud
-        id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          token_format: access_token
-          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
-      - name: Install gsutil 
-        uses: 'google-github-actions/setup-gcloud@v1'
-        with:
-          version: '>= 363.0.0'
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/download-docker-resources
 
-      - name: Download resources
-        run: |
-          gsutil cp gs://concordance-data/scripts/RepeatMasker-4.1.2-p1.tar.gz RepeatMasker-4.1.2-p1.tar.gz
-          gsutil cp gs://concordance-data/scripts/rmblast-2.14.1+-x64-linux.tar.gz rmblast-2.14.1+-x64-linux.tar.gz
-          
-      - name: Upload resources
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-resources
-          path: |
-            RepeatMasker-4.1.2-p1.tar.gz
-            rmblast-2.14.1+-x64-linux.tar.gz
-          
   build:
     needs: [pre-build]
     uses: Ultimagen/ugbio-utils/.github/workflows/docker-build-push.yml@main
