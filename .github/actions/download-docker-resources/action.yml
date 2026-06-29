@@ -1,0 +1,32 @@
+name: "Download gridss docker resources"
+description: "Download RepeatMasker and rmblast tarballs from GCS and upload them as a build artifact"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        token_format: access_token
+        workload_identity_provider: projects/55428976747/locations/global/workloadIdentityPools/devops-pool/providers/devops-pool-provider
+        service_account: gcr-push-sa@ultima-data-307918.iam.gserviceaccount.com
+
+    - name: Install gsutil
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        version: ">= 363.0.0"
+
+    - name: Download resources
+      shell: bash
+      run: |
+        gsutil cp gs://concordance-data/scripts/RepeatMasker-4.1.2-p1.tar.gz RepeatMasker-4.1.2-p1.tar.gz
+        gsutil cp gs://concordance-data/scripts/rmblast-2.14.1+-x64-linux.tar.gz rmblast-2.14.1+-x64-linux.tar.gz
+
+    - name: Upload resources
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-resources
+        path: |
+          RepeatMasker-4.1.2-p1.tar.gz
+          rmblast-2.14.1+-x64-linux.tar.gz

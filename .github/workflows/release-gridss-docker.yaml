@@ -19,7 +19,14 @@ permissions:
   contents: write
 
 jobs:
+  pre-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/download-docker-resources
+
   release-and-build:
+    needs: [pre-build]
     uses: Ultimagen/ugbio-utils/.github/workflows/release-and-build-docker.yml@main
     secrets: inherit
     with:
@@ -27,3 +34,5 @@ jobs:
       minor-release: ${{ inputs.minor-release }}
       create-release: ${{ inputs.create-release }}
       base-branch: "ilyasoifer/flow.gridss"
+      docker-target: gridss
+      artifact-name: docker-resources
