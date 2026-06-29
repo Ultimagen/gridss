@@ -27,7 +27,7 @@ jobs:
 
   release-and-build:
     needs: [pre-build]
-    uses: Ultimagen/ugbio-utils/.github/workflows/release-and-build-docker.yml@DATA-9857-release-and-build-docker-workflow
+    uses: Ultimagen/ugbio-utils/.github/workflows/release-and-build-docker.yml@main
     secrets: inherit
     with:
       docker-image: gridss
