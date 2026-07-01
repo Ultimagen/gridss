@@ -78,7 +78,11 @@ def _poor_mq_has_sa(mappings: list, mq_threshold: int) -> bool:
     return poor_mq
 
 def _q_span(mappings: list) -> int:
-    '''Calculate the query span of the mappings
+    '''Calculate the query span of the mappings, accounting for strand orientation
+
+    When segments are on opposite strands, their query_alignment_start/end positions
+    are in different coordinate systems (forward vs reverse-complement). This function
+    converts all positions to a common coordinate system before calculating the span.
 
     Parameters
     ----------
@@ -88,9 +92,33 @@ def _q_span(mappings: list) -> int:
     Returns
     -------
     int
-        Query span
+        Query span in the original query coordinate system
     '''
-    return max([x.end for x in mappings]) - min([x.start for x in mappings])
+    if len(mappings) == 1:
+        return mappings[0].end - mappings[0].start
+
+    # Get query length from the first mapping
+    query_length = mappings[0]._rec.query_length
+
+    # Convert all positions to forward coordinate system
+    adjusted_positions = []
+    for mapping in mappings:
+        if mapping._rec.is_reverse:
+            # For reverse strand: position 0 in stored SEQ corresponds to
+            # position (query_length - 1) in original query
+            # Convert: [start, end) in reverse -> [query_length - end, query_length - start) in forward
+            adj_start = query_length - mapping.end
+            adj_end = query_length - mapping.start
+        else:
+            # Forward strand: positions are already in original query coordinates
+            adj_start = mapping.start
+            adj_end = mapping.end
+        adjusted_positions.append((adj_start, adj_end))
+
+    all_starts = [pos[0] for pos in adjusted_positions]
+    all_ends = [pos[1] for pos in adjusted_positions]
+
+    return max(all_ends) - min(all_starts)
 
 def compare_read_mappings(first: list, second: list, mq_threshold: int, idx1:int, idx2: int, tie_breaker_idx: int) -> int:
     '''Compare two lists of MappingKey objects. The comparison is based on the following criteria:
