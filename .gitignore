@@ -29,3 +29,9 @@ scripts/.Rhistory
 # Docker build dependencies
 RepeatMasker-4.1.2-p1.tar.gz
 rmblast-2.14.1+-x64-linux.tar.gz
+.Rprofile
+renv.lock
+.claude/settings.json
+renv/.gitignore
+renv/activate.R
+renv/settings.json
