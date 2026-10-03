@@ -3,7 +3,9 @@
 #    where UG data introduces false variation due to the limit on calling homopolymer length
 
 import pysam
+import subprocess
 import pyfaidx
+import itertools
 import tqdm.auto as tqdm
 import argparse
 import re
@@ -297,19 +299,21 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
     with pysam.AlignmentFile(cram_path) as cram:
         with pysam.AlignmentFile(output_path, mode='wb', header=cram.header) as output:
             # Iterate over the reads in the CRAM file
-            for read in cram.fetch(contig):
+            for read in tqdm.tqdm(cram.fetch(contig)):
                 count += 1
                 sequence = read.query_sequence
                 # Skip reads without a query sequence, or with ambiguous bases
                 skip_read = sequence is None or not all(c in 'atgc' for c in sequence.lower())
                 skip_read = skip_read or not read_is_candidate_for_realign(read, min_required_softclip_length)
+                original_aln = ",".join((read.reference_name, str(read.reference_start + 1), '+' if not read.is_reverse else '-'))
+                read.set_tag("oa", original_aln)
                 if not skip_read:
                     # Search for homopolymers in the sequence
                     edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence,
                                                                                                  homopolymer_length)
                     # Search for homopolymer in the reference
                     sc_length = 0
-                    if read.cigartuples[0][0] == 4:
+                    if read.cigartuples[0][0] == 4: 
                         # the read is soft clipped
                         sc_length = read.cigartuples[0][1]
                     del_length = sum([length for op, length in read.cigartuples if op == 2])
@@ -369,7 +373,6 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                             adjusted_cigar) or calculate_sequence_length_by_cigar(adjusted_cigar) == 0):
                         raise AssertionError(
                             f"failed for read: {read.query_name}\ncigar: {adjusted_cigar}\ncigar_len:{calculate_sequence_length_by_cigar(adjusted_cigar)}\nseq_len:{len(sequence)}\nsequence: {sequence}\nedited_sequence: {edited_sequence}")
-
                     output.write(read)
                 else:
                     adjusted_cigar = adjust_and_merge_cigar(read.cigarstring)
@@ -540,72 +543,114 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
 
     return updated_cigar, start_pos
 
+def fix_sa_tag_and_sort(input_bam: str, output_bam: str, ref_fasta: str, n_jobs: int): 
+    """Corrects the NM,SA tag matches the tag of the supplementary alignment, sorts output by coordinate, creates index
+    @param input_bam: The input BAM file
+    @param output_bam: The output BAM file with fixed SA tags
+    @param ref_fasta: The reference FASTA file
+    @param n_jobs: The number of parallel jobs to use for collating the BAM file
+    """
+    remove_bam_files = []
+    # step 1: calmd
+    output_step1 = output_bam + ".step1.bam"
+    with open(output_step1, "wb") as outfile:
+        subprocess.check_call(["samtools", "calmd", "-Q", "-@{}".format(n_jobs), "-b", input_bam, ref_fasta], stdout=outfile)
+    remove_bam_files.append(output_step1)
+    # step 2: collate the reads
+    output_step2 = output_bam + ".step2.bam"
+    pysam.collate(output_step1,  f"-@{n_jobs}","-o", output_step2)
+    remove_bam_files.append(output_step2)
+    # step 3: group by sample name, fix SA tags
+    with pysam.AlignmentFile(output_step2, "rb") as infile: 
+        output_step3 = output_bam + ".step3.bam"
+        with pysam.AlignmentFile(output_step3, "wb", template=infile) as outfile: 
+            it = itertools.groupby(infile, key=lambda read: read.query_name)
+            rec2hash = lambda rec: tuple(rec.get_tag("oa").split(",")) if rec.has_tag("oa") else (rec.reference_name, str(rec.reference_start+1), '+' if not rec.is_reverse else '-') 
+            rec2sa   = lambda rec: ",".join((rec.reference_name, str(rec.reference_start+1), '+' if not rec.is_reverse else '-', 
+                                            rec.cigarstring, str(rec.mapping_quality), str(rec.get_tag("NM"))))
+            for record_group in it: 
+                records = [ x for x in record_group[1]]
+                expected_sa_dictionary = {}
+                for r in records:
+                    expected_sa_dictionary[rec2hash(r)] = rec2sa(r)
+                for r in records:
+                    if r.has_tag("SA"):
+                        sa_tag = str(r.get_tag("SA"))
+                        sa_entries = sa_tag.split(";")
+                        sa_hashes = [ tuple(x.split(",")[:3]) for x in sa_entries if x ]
+                        expected_sa = [ expected_sa_dictionary[x] for x in sa_hashes ] 
+                        expected_sa = ";".join(expected_sa)
+                        r.set_tag("SA", expected_sa)
+                    outfile.write(r)
+        remove_bam_files.append(output_step3)
+    pysam.sort(output_step3, f"-@{n_jobs}", "-o",output_bam)
+    pysam.index(output_bam)
+    for f in remove_bam_files:
+        os.remove(f)
+    
+            
+def main():
+    parser = argparse.ArgumentParser(description='Find and realign homopolymers in reads.')
+    parser.add_argument('--input', required=True, help='The input CRAM file')
+    parser.add_argument('--output', required=True, help='The output CRAM file')
+    parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
+    parser.add_argument('--homopolymer_length', type=int, default=10, help='The length of homopolymers to search for')
+    parser.add_argument('--min_required_softclip_length', type=int, default=10, help='The minimum required soft clip length in the alignment to attempt realignment')
+    parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
+    args = parser.parse_args()
 
-parser = argparse.ArgumentParser(description='Find and realign homopolymers in reads.')
-parser.add_argument('--input', required=True, help='The input CRAM file')
-parser.add_argument('--output', required=True, help='The output CRAM file')
-parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
-parser.add_argument('--homopolymer_length', type=int, default=10, help='The length of homopolymers to search for')
-parser.add_argument('--min_required_softclip_length', type=int, default=10, help='The minimum required soft clip length in the alignment to attempt realignment')
-parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
-args = parser.parse_args()
+    MIN_CONTIG_LENGTH = 100000
 
-MIN_CONTIG_LENGTH = 100000
+    with pysam.AlignmentFile(args.input, "rc") as cram_file:
+        # Get the list of contig names
+        contigs = cram_file.references
+        # Get the list of contig lengths
+        contig_lengths = cram_file.lengths
+        large_contigs = [
+            contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
+        ]
 
-with pysam.AlignmentFile(args.input, "rc") as cram_file:
-    # Get the list of contig names
-    contigs = cram_file.references
-    # Get the list of contig lengths
-    contig_lengths = cram_file.lengths
-    large_contigs = [
-        contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
-    ]
-
-    results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
-        delayed(realign_homopolymers)(
-            args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig, args.min_required_softclip_length
+        results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
+            delayed(realign_homopolymers)(
+                args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig, args.min_required_softclip_length
+            )
+            for contig in tqdm.tqdm(large_contigs)
         )
-        for contig in tqdm.tqdm(large_contigs)
-    )
-    total_count = 0
-    total_count_homopolymer = 0
-    total_choices = [0, 0, 0, 0]
-    for count, count_homopolymer, choices in results:
-        total_count += count
-        total_count_homopolymer += count_homopolymer
-        total_choices = [total_choices[i] + choices[i] for i in range(4)]
+        total_count = 0
+        total_count_homopolymer = 0
+        total_choices = [0, 0, 0, 0]
+        for count, count_homopolymer, choices in results:
+            total_count += count
+            total_count_homopolymer += count_homopolymer
+            total_choices = [total_choices[i] + choices[i] for i in range(4)]
 
-    # sort and index the contig files
-    for contig in large_contigs:
-        pysam.sort("-o", f"{args.output}{contig}_sorted.bam", f"{args.output}{contig}.bam")
-        pysam.index(f"{args.output}{contig}_sorted.bam")
 
-    # merge the contig files together
-    with pysam.AlignmentFile(args.output, mode='wb', header=cram_file.header) as output:
-        with pysam.AlignmentFile(args.input) as cram:
-            for contig in contigs:
-                if contig in large_contigs:
-                    with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
-                        for read in contig_file:
-                            output.write(read)
-                else:
-                    # copy the reads from the original file in case the contig is short
-                    for read in cram.fetch(contig):
-                            output.write(read)
-                            total_count +=1
+        # merge the contig files together
+        with pysam.AlignmentFile(args.output + ".tmp.bam", mode='wb', header=cram_file.header) as output:
+            with pysam.AlignmentFile(args.input) as cram:
+                for contig in contigs:
+                    if contig in large_contigs:
+                        with pysam.AlignmentFile(f"{args.output}{contig}.bam") as contig_file:
+                            for read in contig_file:
+                                output.write(read)
+                    else:
+                        # copy the reads from the original file in case the contig is short
+                        for read in cram.fetch(contig):
+                                output.write(read)
+                                total_count +=1
 
-    # remove the contig files
-    for contig in large_contigs:
-        os.remove(f"{args.output}{contig}.bam")
-        os.remove(f"{args.output}{contig}_sorted.bam")
-        os.remove(f"{args.output}{contig}_sorted.bam.bai")
+        fix_sa_tag_and_sort(args.output + ".tmp.bam", args.output, args.reference, args.n_jobs)
+        # remove the contig files
+        for contig in large_contigs:
+            os.remove(f"{args.output}{contig}.bam")
+        os.remove(f"{args.output}.tmp.bam")
 
-    pysam.index(args.output)
+        logger.info(f"Total reads: {total_count}")
+        logger.info(f"Reads with homopolymers: {total_count_homopolymer}")
+        logger.info(f"Reads where original sequence is better: {total_choices[0]}")
+        logger.info(f"Reads where original sequence is better (local): {total_choices[1]}")
+        logger.info(f"Reads where reverse complement sequence is better: {total_choices[2]}")
+        logger.info(f"Reads where reverse complement sequence is better (local): {total_choices[3]}")
 
-    logger.info(f"Total reads: {total_count}")
-    logger.info(f"Reads with homopolymers: {total_count_homopolymer}")
-    logger.info(f"Reads where original sequence is better: {total_choices[0]}")
-    logger.info(f"Reads where original sequence is better (local): {total_choices[1]}")
-    logger.info(f"Reads where reverse complement sequence is better: {total_choices[2]}")
-    logger.info(f"Reads where reverse complement sequence is better (local): {total_choices[3]}")
-
+if __name__ == "__main__":
+    main()
