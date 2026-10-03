@@ -102,7 +102,7 @@
 				</executions>
 			</plugin>
 			<plugin>
-				<groupId>org.eluder.coveralls</groupId>
+				<groupId>org.elueder.coveralls</groupId>
 				<artifactId>coveralls-maven-plugin</artifactId>
 				<version>4.2.0</version>
 			</plugin>
@@ -201,6 +201,12 @@
 			<groupId>com.intel.gkl</groupId>
 			<artifactId>gkl</artifactId>
 			<version>0.8.6</version>
+		</dependency>
+		<!-- Explicit FreeMarker dependency to resolve CVE-2026-84939 -->
+		<dependency>
+			<groupId>org.freemarker</groupId>
+			<artifactId>freemarker</artifactId>
+			<version>2.3.35</version>
 		</dependency>
 	</dependencies>
 	<dependencyManagement>
