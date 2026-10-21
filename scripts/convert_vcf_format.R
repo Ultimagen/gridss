@@ -172,6 +172,9 @@ write(paste(Sys.time(),"Go over INVersions"), stderr())
 # Change SVTYPE from INV to BND for all INV variants
 inv_indices <- which(!is.na(info(vcf)$SVTYPE) & info(vcf)$SVTYPE == "INV")
 info(vcf)$SVTYPE[inv_indices] <- "BND"
+# Breakends have no END or SVLEN (as for CTX and in Manta output): the mate is given in ALT
+info(vcf)$END[inv_indices] <- NA
+info(vcf)$SVLEN[inv_indices] <- NA
 
 write(paste(Sys.time(),"Select short deletions"), stderr())
 
