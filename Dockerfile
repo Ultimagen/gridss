@@ -26,17 +26,12 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
 	libomp-dev \
     python3-pip \
 	&& rm -rf /var/lib/apt/lists/* \
-	&& pip3 install pysam==0.22.0 \
-	&& pip3 install biopython==1.83 \
-	&& pip3 install pyfaidx==0.8.1.1 \
-	&& pip3 install joblib==1.4.0 \
-	&& pip3 install parasail==1.3.4 \
+	&& pip3 install pysam==0.22.0 biopython==1.83 pyfaidx==0.8.1.1 joblib==1.4.0 parasail==1.3.4 \
 	&& ln -s /usr/bin/python3 /usr/bin/python
 
 # compile gridsstools
 FROM gridss_c_build_environment AS gridss_builder_c
 RUN mkdir /opt/gridss/
-ARG GRIDSS_VERSION
 COPY src/main/c /opt/gridss/src/main/c
 COPY src/test/resources /opt/gridss/src/test/resources
 RUN cd /opt/gridss/src/main/c/gridsstools/htslib && \
@@ -85,13 +80,11 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-instal
 		bcftools \
 		r-base \
 		time \
-		libomp-dev \
 		perl-modules \
 		libtext-soundex-perl \
 		python3-h5py \
 		rsync \
 		curl \
-		libxml2-dev \
 		libcairo2-dev \
 		libgit2-dev \
 		default-libmysqlclient-dev \
@@ -146,15 +139,18 @@ RUN cd /opt/ && \
 	tar zxf RepeatMasker-*.tar.gz && \
 	rm RepeatMasker-*.tar.gz
 # Install GATK
-RUN export GATK_VERSION="4.6.0.0" && \
+# GATK 4.7.0.0 rebuilt by Ultima with netty-bom 4.1.139.Final (CVE-2026-75595, no log4j 1.2.17), see BIOIN-3161.
+# The spark jar is removed: only non-Spark tools (IntervalListToBed, PrintReads) are used.
+RUN export GATK_VERSION="4.7.0.0-ug.netty1" && \
+    export GATK_SHA256="044b98ad949d5a93eaf7666b5c2b5145741f68d7fd6a4fe75da109b83be02f78" && \
     mkdir -p /opt/gatk && \
     cd /opt/gatk && \
-    wget https://github.com/broadinstitute/gatk/releases/download/${GATK_VERSION}/gatk-${GATK_VERSION}.zip && \
+    wget https://github.com/Ultimagen/gatk/releases/download/${GATK_VERSION}/gatk-${GATK_VERSION}.zip && \
+    echo "${GATK_SHA256}  gatk-${GATK_VERSION}.zip" | sha256sum -c - && \
     unzip gatk-${GATK_VERSION}.zip && \
     rm gatk-${GATK_VERSION}.zip && \
+    rm gatk-${GATK_VERSION}/gatk-package-${GATK_VERSION}-spark.jar && \
     ln -s /opt/gatk/gatk-${GATK_VERSION}/gatk /usr/local/bin/gatk
-# Install Java
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y default-jdk && rm -rf /var/lib/apt/lists/*
 ### Kraken2 and dependencies
 # dustmasker from e-direct: (or is this in ncbi-blast as well?)
 RUN mkdir /opt/blast && \
@@ -185,7 +181,7 @@ RUN cd /opt/RepeatMasker && \
 # R packages used by GRIDSS - R package need the C toolchain installed
 ENV R_INSTALL_STAGED=false
 RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/", warn=2); \
-	packages <- c("tidyverse", "assertthat", "testthat", "randomForest", "stringdist", "stringr", "argparser", "R.cache", "BiocManager", "Rcpp", "blob", "RSQLite", "pbapply"); \
+	packages <- c("tidyverse", "assertthat", "testthat", "stringdist", "stringr", "argparser", "BiocManager", "pbapply"); \
 	install.packages(packages); \
 	failed <- packages[!packages %in% installed.packages()[,"Package"]]; \
 	if(length(failed) > 0) { \
@@ -194,7 +190,7 @@ RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/", warn=2);
 	}'
 RUN Rscript -e 'options(Ncpus=8L, repos="https://cloud.r-project.org/", warn=2); \
 	library(BiocManager); \
-	packages <- c("StructuralVariantAnnotation", "VariantAnnotation", "rtracklayer", "BSgenome", "Rsamtools", "biomaRt", "org.Hs.eg.db", "TxDb.Hsapiens.UCSC.hg19.knownGene", "TxDb.Hsapiens.UCSC.hg38.knownGene"); \
+	packages <- c("StructuralVariantAnnotation", "VariantAnnotation", "rtracklayer", "BSgenome", "Rsamtools"); \
 	BiocManager::install(ask=FALSE, pkgs=packages); \
 	failed <- packages[!packages %in% installed.packages()[,"Package"]]; \
 	if(length(failed) > 0) { \
@@ -214,6 +210,11 @@ RUN mkdir /opt/gridss/ /data
 COPY --from=gridss_builder_c /opt/gridss/gridsstools /opt/gridss/
 COPY --from=gridss_builder_java /opt/gridss/gridss-${GRIDSS_VERSION}-gridss-jar-with-dependencies.jar /opt/gridss/
 RUN pip3 install tqdm
+# linux-libc-dev (kernel headers) only carries unfixed kernel CVEs and is needed only for compiling.
+# Everything is compiled by now, so remove it together with the packages depending on it (libc6-dev,
+# build-essential, *-dev). No autoremove: it would drop runtime libraries the R packages link against.
+RUN apt-get purge -y linux-libc-dev && \
+	rm -rf /var/lib/apt/lists/*
 COPY scripts/gridss \
 	scripts/gridss_annotate_vcf_kraken2 \
 	scripts/gridss_annotate_vcf_repeatmasker \
