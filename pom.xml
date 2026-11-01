@@ -102,7 +102,7 @@
 				</executions>
 			</plugin>
 			<plugin>
-				<groupId>org.elueder.coveralls</groupId>
+				<groupId>org.eluder.coveralls</groupId>
 				<artifactId>coveralls-maven-plugin</artifactId>
 				<version>4.2.0</version>
 			</plugin>
