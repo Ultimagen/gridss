@@ -213,6 +213,11 @@
 			<version>0.8.6</version>
 		</dependency>
 		<dependency>
+			<groupId>org.freemarker</groupId>
+			<artifactId>freemarker</artifactId>
+			<version>2.3.35</version>
+		</dependency>
+		<dependency>
   			<groupId>org.xerial.snappy</groupId>
   			<artifactId>snappy-java</artifactId>
   			<version>1.1.10.4</version>
