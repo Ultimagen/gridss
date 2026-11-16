@@ -24,6 +24,12 @@ import java.util.stream.Collectors;
 )
 public class AnnotateVariants extends VcfTransformCommandLineProgram {
 	private static final Log log = Log.getInstance(AnnotateVariants.class);
+	/**
+	 * Decode each input once for both evidence allocation and reference coverage
+	 */
+	public boolean sharedCoverageDecode = Defaults.ANNOTATE_SHARED_DECODE;
+	public int sharedDecodeMaxCoverageReads = Defaults.ANNOTATE_SHARED_DECODE_MAX_COVERAGE_READS;
+	public int sharedDecodeMaxEvidenceRecords = Defaults.ANNOTATE_SHARED_DECODE_MAX_EVIDENCE_RECORDS;
 	public static void writeAssemblyBreakends(File file, AssemblyEvidenceSource assemblyEvidence) throws IOException {
 		log.info("Writing breakend assembly support.");
 		File tmp = gridss.Defaults.OUTPUT_TO_TEMP_FILE ? FileSystemContext.getWorkingFileFor(file) : file;
@@ -61,6 +67,14 @@ public class AnnotateVariants extends VcfTransformCommandLineProgram {
 		copyInputs(arc);
 		copyInputs(ihom);
 		ae.INPUT_VCF = INPUT_VCF; // needed for caching 
+		if (sharedCoverageDecode) {
+			// before ae.iterator(): its read-ahead threads start decoding straight away
+			for (SAMEvidenceSource ses : getSamEvidenceSources()) {
+				if (ses.shareDecodeWithCoverage(sharedDecodeMaxCoverageReads, sharedDecodeMaxEvidenceRecords) == null) {
+					log.info("Not sharing the decode of " + ses.getFile() + " with reference coverage: evidence reads a different file");
+				}
+			}
+		}
 		calls = new AsyncBufferedIterator<VariantContextDirectedEvidence>(ae.iterator(calls, threadpool), 128, 2, "AllocateEvidence");
 		//List<VariantContextDirectedEvidence> callsList = calls.stream().collect(Collectors.toList());
 		calls = new AsyncBufferedIterator<VariantContextDirectedEvidence>(arc.iterator(calls, threadpool), 128, 2, "AnnotateReferenceCoverage");
