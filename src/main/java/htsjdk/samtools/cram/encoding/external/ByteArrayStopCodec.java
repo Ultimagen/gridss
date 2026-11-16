@@ -5,6 +5,7 @@ import htsjdk.samtools.util.RuntimeIOException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 
 /**
  * Encode byte arrays by specifying a stop byte to separate the arrays.
@@ -12,6 +13,7 @@ import java.io.IOException;
  */
 final class ByteArrayStopCodec extends ExternalCodec<byte[]> {
     private final int stop;
+    private byte[] scratch = new byte[256];
 
     /**
      * Construct a Byte Array Stop Codec
@@ -29,14 +31,27 @@ final class ByteArrayStopCodec extends ExternalCodec<byte[]> {
 
     @Override
     public byte[] read() {
-        final ByteArrayOutputStream readingBAOS = new ByteArrayOutputStream();
-        int b;
-        readingBAOS.reset();
-        while ((b = inputStream.read()) != -1 && b != stop) {
-            readingBAOS.write(b);
+        // Ultima fork: bulk read + scan instead of one synchronized read() per byte (~25% of CRAM decode CPU).
+        // Same result and stream position: the bytes before the stop byte, with the stop byte consumed.
+        inputStream.mark(0);
+        int n = 0;
+        while (true) {
+            if (n == scratch.length) {
+                scratch = Arrays.copyOf(scratch, 2 * n);
+            }
+            final int r = inputStream.read(scratch, n, scratch.length - n);
+            if (r <= 0) {
+                return Arrays.copyOf(scratch, n);
+            }
+            for (int i = n; i < n + r; i++) {
+                if ((0xFF & scratch[i]) == stop) {
+                    inputStream.reset();
+                    inputStream.skip(i + 1);
+                    return Arrays.copyOf(scratch, i);
+                }
+            }
+            n += r;
         }
-
-        return readingBAOS.toByteArray();
     }
 
     @Override

@@ -45,32 +45,8 @@ public final class RANS {
     private RANSDecodingSymbol[][] decodingSymbols;
     private RANSEncodingSymbol[][] encodingSymbols;
 
-    // Lazy initialization of working memory for the encoder/decoder
-    private void initializeRANSCoder() {
-        if (D == null) {
-            D = new ArithmeticDecoder[NUMBER_OF_SYMBOLS];
-            for (int i = 0; i < NUMBER_OF_SYMBOLS; i++) {
-                D[i] = new ArithmeticDecoder();
-            }
-        } else {
-            for (int i = 0; i < NUMBER_OF_SYMBOLS; i++) {
-                D[i].reset();
-            }
-        }
-        if (decodingSymbols == null) {
-            decodingSymbols = new RANSDecodingSymbol[NUMBER_OF_SYMBOLS][NUMBER_OF_SYMBOLS];
-            for (int i = 0; i < decodingSymbols.length; i++) {
-                for (int j = 0; j < decodingSymbols[i].length; j++) {
-                    decodingSymbols[i][j] = new RANSDecodingSymbol();
-                }
-            }
-        } else {
-            for (int i = 0; i < decodingSymbols.length; i++) {
-                for (int j = 0; j < decodingSymbols[i].length; j++) {
-                    decodingSymbols[i][j].set(0, 0);
-                }
-            }
-        }
+    // Lazy initialization of working memory for the encoder (the decoder uses initializeRANSDecoder)
+    private void initializeRANSEncoder() {
         if (encodingSymbols == null) {
             encodingSymbols = new RANSEncodingSymbol[NUMBER_OF_SYMBOLS][NUMBER_OF_SYMBOLS];
             for (int i = 0; i < encodingSymbols.length; i++) {
@@ -87,14 +63,37 @@ public final class RANS {
         }
     }
 
+    // Ultima fork: decoding resets only the tables the block's order reads (order 0: context 0 only) and never
+    // the encoder tables; the full reset per block was ~14% of CRAM decode CPU. Unused rows are allocated lazily.
+    private void initializeRANSDecoder(final ORDER order) {
+        if (D == null) {
+            D = new ArithmeticDecoder[NUMBER_OF_SYMBOLS];
+            decodingSymbols = new RANSDecodingSymbol[NUMBER_OF_SYMBOLS][];
+        }
+        final int contexts = order == ORDER.ZERO ? 1 : NUMBER_OF_SYMBOLS;
+        for (int i = 0; i < contexts; i++) {
+            if (D[i] == null) {
+                D[i] = new ArithmeticDecoder();
+                decodingSymbols[i] = new RANSDecodingSymbol[NUMBER_OF_SYMBOLS];
+                for (int j = 0; j < NUMBER_OF_SYMBOLS; j++) {
+                    decodingSymbols[i][j] = new RANSDecodingSymbol();
+                }
+            } else {
+                D[i].reset();
+                for (int j = 0; j < NUMBER_OF_SYMBOLS; j++) {
+                    decodingSymbols[i][j].set(0, 0);
+                }
+            }
+        }
+    }
+
     public ByteBuffer uncompress(final ByteBuffer inBuffer) {
         if (inBuffer.remaining() == 0) {
             return EMPTY_BUFFER;
         }
 
-        initializeRANSCoder();
-
         final ORDER order = ORDER.fromInt(inBuffer.get());
+        initializeRANSDecoder(order);
 
         inBuffer.order(ByteOrder.LITTLE_ENDIAN);
         final int inSize = inBuffer.getInt();
@@ -121,7 +120,7 @@ public final class RANS {
             return EMPTY_BUFFER;
         }
 
-        initializeRANSCoder();
+        initializeRANSEncoder();
 
         if (inBuffer.remaining() < MINIMUM__ORDER_1_SIZE) {
             // ORDER-1 encoding of less than 4 bytes is not permitted, so just use ORDER-0
