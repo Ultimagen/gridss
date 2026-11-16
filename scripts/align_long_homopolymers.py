@@ -72,6 +72,21 @@ def adjust_and_merge_cigar(cigar):
     return merged_cigar
 
 
+def cigar_may_change(cigartuples):
+    """
+    False only when adjust_and_merge_cigar would return the CIGAR unchanged:
+    no two adjacent I/D operations, no two adjacent equal operations, no B operation (dropped by the parser)
+    """
+    if not cigartuples:
+        return True
+    prev_op = None
+    for op, _ in cigartuples:
+        if op == 9 or op == prev_op or (op in (1, 2) and prev_op in (1, 2)):
+            return True
+        prev_op = op
+    return False
+
+
 ## ONLY FOR DEBUGGING
 def calculate_sequence_length_by_cigar(cigar_string):
     """
@@ -136,27 +151,19 @@ def remove_long_homopolymers(sequence, homopolymer_length=10):
     @param homopolymer_length: The length of homopolymers to search for
     @return: The edited sequence, the start and end positions of the deletions, and the total length of deletions
     """
-    i = 0
-    del_length = 0
-    edited_sequence = ""
+    edited_parts = []
     start_end_del_tuples = []
-    while i < len(sequence):
-        count = 1
-        while i + count < len(sequence) and sequence[i] == sequence[i + count]:
-            count += 1
-
-        if count > homopolymer_length:
-            edited_sequence += sequence[i] * homopolymer_length
-            i += count
-            start_end_del_tuples.append((i - (count - homopolymer_length), i))
-            del_length += count - homopolymer_length
-        elif count > 1:
-            edited_sequence += sequence[i] * count
-            i += count
-        else:
-            edited_sequence += sequence[i]
-            i += 1
-    return edited_sequence, start_end_del_tuples, del_length
+    del_length = 0
+    last_end = 0
+    for run in re.finditer(r"(.)\1{%d,}" % homopolymer_length, sequence):
+        start, end = run.span()
+        edited_parts.append(sequence[last_end:start])
+        edited_parts.append(sequence[start] * homopolymer_length)
+        start_end_del_tuples.append((start + homopolymer_length, end))
+        del_length += end - start - homopolymer_length
+        last_end = end
+    edited_parts.append(sequence[last_end:])
+    return "".join(edited_parts), start_end_del_tuples, del_length
 
 
 def create_aligner(mode, match, mismatch, gap_penalty, gap_extension_penalty, sc_penalty):
@@ -179,6 +186,32 @@ def create_aligner(mode, match, mismatch, gap_penalty, gap_extension_penalty, sc
     return aligner
 
 
+def alignment_score(fa_seq, sequence, aligner):
+    """
+    The score run_alignment would return, without building the alignment (traceback)
+    """
+    if len(fa_seq) == 0 or len(sequence) == 0:
+        return 0
+    return aligner.score(fa_seq, sequence)
+
+
+def choose_global_or_local(fa_seq, sequence, ref_start, sc_length, global_aligner, local_aligner):
+    """
+    Choose between the global and the local alignment of the sequence, penalizing each soft clip of the local one
+    The global alignment is built only when it is chosen
+    @return: The score, CIGAR string, start position, reference start position, and whether global was chosen
+    """
+    score_local, cigar_local, start_pos_local, _, r_start_local = run_alignment(fa_seq, sequence, ref_start,
+                                                                                sc_length, local_aligner)
+    score_glob = alignment_score(fa_seq, sequence, global_aligner)
+    penalize_times = cigar_local.count('S')
+    if score_glob >= score_local + global_aligner.query_end_gap_score * penalize_times:
+        _, cigar_glob, start_pos_glob, _, r_start_glob = run_alignment(fa_seq, sequence, ref_start, sc_length,
+                                                                       global_aligner)
+        return score_glob, cigar_glob, start_pos_glob, r_start_glob, True
+    return score_local, cigar_local, start_pos_local, r_start_local, False
+
+
 def align_and_choose(read, sequence, global_aligner, local_aligner, fa_seq, edited_sequence, ref_start, sc_length,
                      start_end_del_tuples):
     """
@@ -196,62 +229,36 @@ def align_and_choose(read, sequence, global_aligner, local_aligner, fa_seq, edit
     the choice of alignment is 0 for the global alignment on the original sequence, 1 for the local alignment on the original sequence,
     2 for the global alignment on the reverse complement, and 3 for the local alignment on the reverse complement
     """
-    # run alignment on original sequence
-    # global alignment
-    score_orig_glob, cigar_orig_glob, start_pos_glob, q_start_glob, r_start_glob = run_alignment(fa_seq,
-                                                                                                 edited_sequence,
-                                                                                                 ref_start, sc_length,
-                                                                                                 global_aligner)
-    # local alignment
-    score_orig_local, cigar_orig_local, start_pos_local, q_start_local, r_start_local = run_alignment(fa_seq,
-                                                                                                      edited_sequence,
-                                                                                                      ref_start,
-                                                                                                      sc_length,
-                                                                                                      local_aligner)
-    # choose the best alignment on original sequence
-    penalize_times = cigar_orig_local.count('S')
-    if score_orig_glob >= score_orig_local + global_aligner.query_end_gap_score * penalize_times:
-        score_orig, cigar_orig, start_pos, r_start, chosen_orig = score_orig_glob, cigar_orig_glob, start_pos_glob, r_start_glob, 1
-    else:
-        score_orig, cigar_orig, start_pos, r_start, chosen_orig = score_orig_local, cigar_orig_local, start_pos_local, r_start_local, 2
+    score_orig, cigar, start_pos, r_start, orig_is_global = choose_global_or_local(fa_seq, edited_sequence, ref_start,
+                                                                                    sc_length, global_aligner,
+                                                                                    local_aligner)
+    choice = 0 if orig_is_global else 1
 
-    # run alignment on reverse complement
     rev_comp_edited_sequence = str(Seq(edited_sequence).reverse_complement())
-    # global alignment
-    score_rev_glob, cigar_rev_glob, start_pos_rev_glob, q_start_rev_glob, r_start_rev_glob = run_alignment(fa_seq,
-                                                                                                           rev_comp_edited_sequence,
-                                                                                                           ref_start,
-                                                                                                           sc_length,
-                                                                                                           global_aligner)
-    # local alignment
-    score_rev_local, cigar_rev_local, start_pos_rev_local, q_start_rev_local, r_start_rev_local = run_alignment(fa_seq,
-                                                                                                                rev_comp_edited_sequence,
-                                                                                                                ref_start,
-                                                                                                                sc_length,
-                                                                                                                local_aligner)
-    # choose the best alignment on reverse complement
-    penalize_times = cigar_rev_local.count('S')
-    if score_rev_glob >= score_rev_local + global_aligner.query_end_gap_score * penalize_times:
-        score_rev, cigar_rev, start_pos_rev, r_start_rev, chosen_rev = score_rev_glob, cigar_rev_glob, start_pos_rev_glob, r_start_rev_glob, 1
-    else:
-        score_rev, cigar_rev, start_pos_rev, r_start_rev, chosen_rev = score_rev_local, cigar_rev_local, start_pos_rev_local, r_start_rev_local, 2
+    # The reverse complement score is one of these two, so the original sequence wins (ties included)
+    # without building the reverse complement alignments; this is the common case
+    rev_score_bound = max(alignment_score(fa_seq, rev_comp_edited_sequence, global_aligner),
+                          alignment_score(fa_seq, rev_comp_edited_sequence, local_aligner))
+    if score_orig < rev_score_bound:
+        score_rev, cigar_rev, start_pos_rev, r_start_rev, rev_is_global = choose_global_or_local(
+            fa_seq, rev_comp_edited_sequence, ref_start, sc_length, global_aligner, local_aligner)
+        if score_orig < score_rev:
+            cigar = cigar_rev
+            start_pos = start_pos_rev
+            r_start = r_start_rev
+            start_end_del_tuples = [(len(sequence) - end, len(sequence) - start) for start, end in start_end_del_tuples]
+            start_end_del_tuples.reverse()
+            choice = 2 if rev_is_global else 3
 
-    if score_orig >= score_rev:
-        cigar = cigar_orig
-        choice = 0 if chosen_orig == 1 else 1
-    else:
-        cigar = cigar_rev
-        start_pos = start_pos_rev
-        r_start = r_start_rev
-        start_end_del_tuples = [(len(sequence) - end, len(sequence) - start) for start, end in start_end_del_tuples]
-        start_end_del_tuples.reverse()
-        choice = 2 if chosen_rev == 1 else 3
-
-        read_qual = read.qual
-        read.query_sequence = str(Seq(sequence).reverse_complement())
-        read.qual = read_qual[::-1]
+            read_qual = read.qual
+            read.query_sequence = str(Seq(sequence).reverse_complement())
+            read.qual = read_qual[::-1]
 
     return read, cigar, start_pos, r_start, choice, start_end_del_tuples
+
+
+AMBIGUOUS_BASE = re.compile(r"[^ACGTacgt]")
+
 
 def read_is_candidate_for_realign(read: pysam.AlignedSegment, min_required_softclip_length: int):
     '''Check if the read is a candidate for realignment (if it has minimal softclip of at least min_required_softclip_length)
@@ -301,8 +308,8 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
                 count += 1
                 sequence = read.query_sequence
                 # Skip reads without a query sequence, or with ambiguous bases
-                skip_read = sequence is None or not all(c in 'atgc' for c in sequence.lower())
-                skip_read = skip_read or not read_is_candidate_for_realign(read, min_required_softclip_length)
+                skip_read = sequence is None or not read_is_candidate_for_realign(read, min_required_softclip_length)
+                skip_read = skip_read or AMBIGUOUS_BASE.search(sequence) is not None
                 if not skip_read:
                     # Search for homopolymers in the sequence
                     edited_sequence, start_end_del_tuples, del_length = remove_long_homopolymers(read.query_sequence,
@@ -372,9 +379,10 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
 
                     output.write(read)
                 else:
-                    adjusted_cigar = adjust_and_merge_cigar(read.cigarstring)
-                    if adjusted_cigar != read.cigarstring:
-                        read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
+                    if cigar_may_change(read.cigartuples):
+                        adjusted_cigar = adjust_and_merge_cigar(read.cigarstring)
+                        if adjusted_cigar != read.cigarstring:
+                            read.cigar = cigar_string_to_cigartuples(adjusted_cigar)
                     output.write(read)
 
     reference.close()
@@ -541,71 +549,75 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
     return updated_cigar, start_pos
 
 
-parser = argparse.ArgumentParser(description='Find and realign homopolymers in reads.')
-parser.add_argument('--input', required=True, help='The input CRAM file')
-parser.add_argument('--output', required=True, help='The output CRAM file')
-parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
-parser.add_argument('--homopolymer_length', type=int, default=10, help='The length of homopolymers to search for')
-parser.add_argument('--min_required_softclip_length', type=int, default=10, help='The minimum required soft clip length in the alignment to attempt realignment')
-parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
-args = parser.parse_args()
+def main():
+    parser = argparse.ArgumentParser(description='Find and realign homopolymers in reads.')
+    parser.add_argument('--input', required=True, help='The input CRAM file')
+    parser.add_argument('--output', required=True, help='The output CRAM file')
+    parser.add_argument('--reference', required=True, help='The reference genome FASTA file')
+    parser.add_argument('--homopolymer_length', type=int, default=10, help='The length of homopolymers to search for')
+    parser.add_argument('--min_required_softclip_length', type=int, default=10, help='The minimum required soft clip length in the alignment to attempt realignment')
+    parser.add_argument("--n_jobs", help="n_jobs of parallel on contigs", type=int, default=-1)
+    args = parser.parse_args()
 
-MIN_CONTIG_LENGTH = 100000
+    MIN_CONTIG_LENGTH = 100000
 
-with pysam.AlignmentFile(args.input, "rc") as cram_file:
-    # Get the list of contig names
-    contigs = cram_file.references
-    # Get the list of contig lengths
-    contig_lengths = cram_file.lengths
-    large_contigs = [
-        contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
-    ]
+    with pysam.AlignmentFile(args.input, "rc") as cram_file:
+        # Get the list of contig names
+        contigs = cram_file.references
+        # Get the list of contig lengths
+        contig_lengths = cram_file.lengths
+        large_contigs = [
+            contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
+        ]
 
-    results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
-        delayed(realign_homopolymers)(
-            args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig, args.min_required_softclip_length
+        results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
+            delayed(realign_homopolymers)(
+                args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig, args.min_required_softclip_length
+            )
+            for contig in tqdm.tqdm(large_contigs)
         )
-        for contig in tqdm.tqdm(large_contigs)
-    )
-    total_count = 0
-    total_count_homopolymer = 0
-    total_choices = [0, 0, 0, 0]
-    for count, count_homopolymer, choices in results:
-        total_count += count
-        total_count_homopolymer += count_homopolymer
-        total_choices = [total_choices[i] + choices[i] for i in range(4)]
+        total_count = 0
+        total_count_homopolymer = 0
+        total_choices = [0, 0, 0, 0]
+        for count, count_homopolymer, choices in results:
+            total_count += count
+            total_count_homopolymer += count_homopolymer
+            total_choices = [total_choices[i] + choices[i] for i in range(4)]
 
-    # sort and index the contig files
-    for contig in large_contigs:
-        pysam.sort("-o", f"{args.output}{contig}_sorted.bam", f"{args.output}{contig}.bam")
-        pysam.index(f"{args.output}{contig}_sorted.bam")
+        # sort and index the contig files
+        for contig in large_contigs:
+            pysam.sort("-o", f"{args.output}{contig}_sorted.bam", f"{args.output}{contig}.bam")
+            pysam.index(f"{args.output}{contig}_sorted.bam")
 
-    # merge the contig files together
-    with pysam.AlignmentFile(args.output, mode='wb', header=cram_file.header) as output:
-        with pysam.AlignmentFile(args.input) as cram:
-            for contig in contigs:
-                if contig in large_contigs:
-                    with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
-                        for read in contig_file:
-                            output.write(read)
-                else:
-                    # copy the reads from the original file in case the contig is short
-                    for read in cram.fetch(contig):
-                            output.write(read)
-                            total_count +=1
+        # merge the contig files together
+        with pysam.AlignmentFile(args.output, mode='wb', header=cram_file.header) as output:
+            with pysam.AlignmentFile(args.input) as cram:
+                for contig in contigs:
+                    if contig in large_contigs:
+                        with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
+                            for read in contig_file:
+                                output.write(read)
+                    else:
+                        # copy the reads from the original file in case the contig is short
+                        for read in cram.fetch(contig):
+                                output.write(read)
+                                total_count +=1
 
-    # remove the contig files
-    for contig in large_contigs:
-        os.remove(f"{args.output}{contig}.bam")
-        os.remove(f"{args.output}{contig}_sorted.bam")
-        os.remove(f"{args.output}{contig}_sorted.bam.bai")
+        # remove the contig files
+        for contig in large_contigs:
+            os.remove(f"{args.output}{contig}.bam")
+            os.remove(f"{args.output}{contig}_sorted.bam")
+            os.remove(f"{args.output}{contig}_sorted.bam.bai")
 
-    pysam.index(args.output)
+        pysam.index(args.output)
 
-    logger.info(f"Total reads: {total_count}")
-    logger.info(f"Reads with homopolymers: {total_count_homopolymer}")
-    logger.info(f"Reads where original sequence is better: {total_choices[0]}")
-    logger.info(f"Reads where original sequence is better (local): {total_choices[1]}")
-    logger.info(f"Reads where reverse complement sequence is better: {total_choices[2]}")
-    logger.info(f"Reads where reverse complement sequence is better (local): {total_choices[3]}")
+        logger.info(f"Total reads: {total_count}")
+        logger.info(f"Reads with homopolymers: {total_count_homopolymer}")
+        logger.info(f"Reads where original sequence is better: {total_choices[0]}")
+        logger.info(f"Reads where original sequence is better (local): {total_choices[1]}")
+        logger.info(f"Reads where reverse complement sequence is better: {total_choices[2]}")
+        logger.info(f"Reads where reverse complement sequence is better (local): {total_choices[3]}")
 
+
+if __name__ == "__main__":
+    main()
