@@ -232,4 +232,47 @@ public class CoverageReadTeeTest extends IntermediateFilesTest {
 			}
 		}
 	}
+	@Test
+	public void lookup_should_match_when_reads_outside_countable_windows_are_dropped() {
+		createRandomInput(3000, 10);
+		List<SAMRecord> records;
+		try (SamReader reader = SamReaderFactory.makeDefault().open(input)) {
+			records = Lists.newArrayList(reader.iterator());
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+		int windowSize = 50;
+		int maxEvidenceWindow = SequentialReferenceCoverageLookup.maxEvidenceWindow(IDSV(records), pairing);
+		List<int[]> queries = Lists.newArrayList(new int[] { 0, 800, 820 }, new int[] { 0, 3000, 3005 }, new int[] { 0, 3010, 3012 }, new int[] { 2, 4000, 4100 });
+		CoverageReadTee counting = tee(1 << 20, 1000);
+		counting.setCountableWindows(new CoverageReadWindows(queries, windowSize, maxEvidenceWindow, 3));
+		drainEvidence(counting.claimEvidenceIterator(), true);
+		int queued = drainCoverage(counting.claimCoverageIterator()).size();
+		assertTrue(queued > 0);
+		assertTrue(queued < expectedCoverage().size() / 2);
+
+		CoverageReadTee tee = tee(1 << 20, 1000);
+		tee.setCountableWindows(new CoverageReadWindows(queries, windowSize, maxEvidenceWindow, 3));
+		drainEvidence(tee.claimEvidenceIterator(), true);
+		ReferenceCoverageLookup fromRecords = new SequentialReferenceCoverageLookup(records.iterator(), IDSV(records), pairing, windowSize, 0, true);
+		ReferenceCoverageLookup fromTee = SequentialReferenceCoverageLookup.fromCoverageReads(tee.claimCoverageIterator(), IDSV(records), pairing, windowSize, 0);
+		for (int[] q : queries) {
+			for (int pos = q[1]; pos <= q[2]; pos++) {
+				assertEquals(fromRecords.readsSupportingNoBreakendAfter(q[0], pos), fromTee.readsSupportingNoBreakendAfter(q[0], pos));
+				assertEquals(fromRecords.readPairsSupportingNoBreakendAfter(q[0], pos), fromTee.readPairsSupportingNoBreakendAfter(q[0], pos));
+			}
+		}
+	}
+	@Test
+	public void countable_windows_should_extend_before_each_query_by_both_windows() {
+		CoverageReadWindows w = new CoverageReadWindows(Lists.newArrayList(new int[] { 0, 100, 110 }, new int[] { 0, 105, 200 }, new int[] { 1, 50, 50 }), 10, 5, 3);
+		assertFalse(w.isCountable(0, 83));
+		assertTrue(w.isCountable(0, 84));
+		assertTrue(w.isCountable(0, 200));
+		assertFalse(w.isCountable(0, 201));
+		assertTrue(w.isCountable(1, 34));
+		assertTrue(w.isCountable(1, 50));
+		assertFalse(w.isCountable(1, 51));
+		assertFalse(w.isCountable(2, 1));
+	}
 }
