@@ -46,6 +46,15 @@ public class SequentialCoverageAnnotator<T extends VariantContextDirectedEvidenc
 		for (SAMEvidenceSource ses : sources) {
 			assert(ses.getSourceCategory() >= 0);
 			assert(ses.getSourceCategory() < context.getCategoryCount());
+			CoverageReadTee tee = ses.getCoverageReadTee();
+			CloseableIterator<CoverageRead> shared = tee == null ? null : tee.claimCoverageIterator();
+			if (shared != null) {
+				toclose.add(shared);
+				SequentialReferenceCoverageLookup sourceLookup = SequentialReferenceCoverageLookup.fromCoverageReads(shared, ses.getMetrics().getIdsvMetrics(), ses.getReadPairConcordanceCalculator(), windowSize, ses.getSourceCategory());
+				context.registerBuffer(ses.getFile().getName(), sourceLookup);
+				result.add(sourceLookup);
+				continue;
+			}
 			// one read-ahead thread per input file
 			SamReader reader = SamReaderFactory.makeDefault().referenceSequence(context.getReferenceFile()).open(ses.getFile());
 			SAMRecordIterator rawIterator = reader.iterator();
