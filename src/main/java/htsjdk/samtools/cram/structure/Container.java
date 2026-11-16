@@ -321,7 +321,8 @@ public class Container {
             // before we convert to SAMRecord, we need to normalize the CRAMCompressionRecord in each Slice
             slice.normalizeCRAMRecords(
                     cramCompressionRecords,
-                    cramReferenceRegion);
+                    cramReferenceRegion,
+                    compressorCache);
             for (final CRAMCompressionRecord cramCompressionRecord : cramCompressionRecords) {
                 final SAMRecord samRecord = cramCompressionRecord.toSAMRecord(samFileHeader);
                 samRecord.setValidationStringency(validationStringency);
