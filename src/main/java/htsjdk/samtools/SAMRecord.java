@@ -428,9 +428,9 @@ public class SAMRecord implements HtsRecord, Cloneable, Locatable, Serializable 
      * for this record.
      */
     public void setReferenceIndex(final int referenceIndex) {
-        // resolveNameFromIndex throws if the index can't be resolved
-        setReferenceName(resolveNameFromIndex(referenceIndex, mHeader));
-        // setReferenceName does this as a side effect, but set the value here to be explicit
+        // Ultima fork: set the name from the dictionary without the name -> index HashMap round trip of
+        // setReferenceName (3-6% of CRAM decode CPU). resolveNameFromIndex still throws on a bad index.
+        mReferenceName = resolveNameFromIndex(referenceIndex, mHeader);
         mReferenceIndex = referenceIndex;
     }
 
@@ -512,9 +512,8 @@ public class SAMRecord implements HtsRecord, Cloneable, Locatable, Serializable 
      * @throws IllegalArgumentException if the mate reference index is not found in the sequence dictionary in the header for this record.
      */
     public void setMateReferenceIndex(final int mateReferenceIndex) {
-        // resolveNameFromIndex throws if the index can't be resolved
-        setMateReferenceName(resolveNameFromIndex(mateReferenceIndex, mHeader));
-        // setMateReferenceName does this as a side effect, but set the value here to be explicit
+        // Ultima fork: as setReferenceIndex, no name -> index round trip
+        mMateReferenceName = resolveNameFromIndex(mateReferenceIndex, mHeader);
         mMateReferenceIndex = mateReferenceIndex;
     }
 
