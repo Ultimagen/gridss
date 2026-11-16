@@ -46,6 +46,18 @@ public class Defaults {
      */
     public static final int ASYNC_READ_COMPUTATIONAL_THREADS;
 
+    /**
+     * Number of threads each CRAM iterator uses to decode containers ahead of the reader.
+     * Records are returned in file order. Default = 0 (decode on the reading thread, as in htsjdk).
+     */
+    public static final int CRAM_DECODE_THREADS;
+
+    /**
+     * Maximum number of CRAM containers each iterator reads and decodes ahead of the reader.
+     * Bounds the memory used by decoded records. Default = 2 * CRAM_DECODE_THREADS.
+     */
+    public static final int CRAM_DECODE_DEPTH;
+
     /** Compression level to be used for writing BAM and other block-compressed outputs.  Default = 5. */
     public static final int COMPRESSION_LEVEL;
 
@@ -127,6 +139,8 @@ public class Defaults {
         USE_ASYNC_IO_WRITE_FOR_SAMTOOLS = getBooleanProperty("use_async_io_write_samtools", false);
         USE_ASYNC_IO_WRITE_FOR_TRIBBLE = getBooleanProperty("use_async_io_write_tribble", false);
         ASYNC_READ_COMPUTATIONAL_THREADS = getIntProperty("async_io_read_threads", Runtime.getRuntime().availableProcessors());
+        CRAM_DECODE_THREADS = getIntProperty("cram_decode_threads", 0);
+        CRAM_DECODE_DEPTH = getIntProperty("cram_decode_depth", 2 * CRAM_DECODE_THREADS);
         COMPRESSION_LEVEL = getIntProperty("compression_level", 5);
         DEFAULT_SAM_EXTENSION = getStringProperty("default_sam_type", "bam");
         DEFAULT_VCF_EXTENSION = getStringProperty("default_vcf_type", "vcf");
