@@ -54,6 +54,7 @@ public class CoverageReadTee {
 	private final ArrayDeque<SAMRecord> evidencePending = new ArrayDeque<>();
 	private final ArrayDeque<Chunk> coverageChunks = new ArrayDeque<>();
 	private Chunk tail;
+	private CoverageReadWindows windows;
 	private int coverageBuffered = 0;
 	private int maxCoverageBufferedSeen = 0;
 	private int maxEvidencePendingSeen = 0;
@@ -76,6 +77,18 @@ public class CoverageReadTee {
 	}
 
 	/**
+	 * Queue for coverage only the reads the lookup can count. Must be set before either side is claimed.
+	 */
+	public synchronized void setCountableWindows(CoverageReadWindows windows) {
+		this.windows = windows;
+	}
+
+	private boolean isQueuedForCoverage(SAMRecord r) {
+		return CoverageRead.isCounted(r, ignoreDuplicates)
+				&& (windows == null || windows.isCountable(r.getReferenceIndex(), r.getAlignmentStart()));
+	}
+
+	/**
 	 * Every record of the file, in file order, or null if already claimed.
 	 */
 	public synchronized CloseableIterator<SAMRecord> claimEvidenceIterator() {
@@ -86,6 +99,7 @@ public class CoverageReadTee {
 
 	/**
 	 * Reads counted by {@link CoverageRead#isCounted(SAMRecord, boolean)}, in file order, or null if already claimed.
+	 * Until the coverage side detaches, only reads inside the countable windows, if set.
 	 */
 	public synchronized CloseableIterator<CoverageRead> claimCoverageIterator() {
 		if (coverageClaimed) return null;
@@ -119,7 +133,7 @@ public class CoverageReadTee {
 
 	private void offerToCoverage(SAMRecord r) {
 		if (detachedAt >= 0 || coverageClosed) return;
-		if (!CoverageRead.isCounted(r, ignoreDuplicates)) return;
+		if (!isQueuedForCoverage(r)) return;
 		CoverageRead cr = CoverageRead.create(r, pairing);
 		if (tail == null) {
 			tail = new Chunk();
@@ -233,7 +247,7 @@ public class CoverageReadTee {
 						evidencePending.add(r);
 						maxEvidencePendingSeen = Math.max(maxEvidencePendingSeen, evidencePending.size());
 					}
-					if (CoverageRead.isCounted(r, ignoreDuplicates)) {
+					if (isQueuedForCoverage(r)) {
 						pulled = CoverageRead.create(r, pairing);
 						return true;
 					}

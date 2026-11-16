@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
@@ -68,12 +69,7 @@ public class AnnotateVariants extends VcfTransformCommandLineProgram {
 		copyInputs(ihom);
 		ae.INPUT_VCF = INPUT_VCF; // needed for caching 
 		if (sharedCoverageDecode) {
-			// before ae.iterator(): its read-ahead threads start decoding straight away
-			for (SAMEvidenceSource ses : getSamEvidenceSources()) {
-				if (ses.shareDecodeWithCoverage(sharedDecodeMaxCoverageReads, sharedDecodeMaxEvidenceRecords) == null) {
-					log.info("Not sharing the decode of " + ses.getFile() + " with reference coverage: evidence reads a different file");
-				}
-			}
+			shareDecodeWithCoverage();
 		}
 		calls = new AsyncBufferedIterator<VariantContextDirectedEvidence>(ae.iterator(calls, threadpool), 128, 2, "AllocateEvidence");
 		//List<VariantContextDirectedEvidence> callsList = calls.stream().collect(Collectors.toList());
@@ -82,6 +78,33 @@ public class AnnotateVariants extends VcfTransformCommandLineProgram {
 		calls = ihom.iterator(calls, threadpool);
 		AnnotateAlleleFraction aaf = new AnnotateAlleleFraction(new AlleleFractionAnnotator(getContext(), getSamEvidenceSources()));
 		return aaf.iterator(calls, threadpool);
+	}
+	/**
+	 * Must run before ae.iterator(): its read-ahead threads start decoding straight away.
+	 */
+	private void shareDecodeWithCoverage() {
+		int windowSize = AnnotateReferenceCoverage.coverageWindowSize(getContext(), getSamEvidenceSources());
+		// allocation can move a call within its evidence window; windowSize is far larger
+		List<int[]> queries = coverageQueries(windowSize);
+		for (SAMEvidenceSource ses : getSamEvidenceSources()) {
+			CoverageReadTee tee = ses.shareDecodeWithCoverage(sharedDecodeMaxCoverageReads, sharedDecodeMaxEvidenceRecords);
+			if (tee == null) {
+				log.info("Not sharing the decode of " + ses.getFile() + " with reference coverage: evidence reads a different file");
+				continue;
+			}
+			int maxEvidenceWindow = SequentialReferenceCoverageLookup.maxEvidenceWindow(ses.getMetrics().getIdsvMetrics(), ses.getReadPairConcordanceCalculator());
+			tee.setCountableWindows(new CoverageReadWindows(queries, windowSize, maxEvidenceWindow, getContext().getDictionary().size()));
+		}
+	}
+	private List<int[]> coverageQueries(int margin) {
+		List<int[]> queries = new ArrayList<>();
+		try (CloseableIterator<VariantContextDirectedEvidence> it = getBreakends(INPUT_VCF)) {
+			while (it.hasNext()) {
+				BreakendSummary bs = it.next().getBreakendSummary();
+				queries.add(new int[] { bs.referenceIndex, bs.start - 1 - margin, bs.end + margin });
+			}
+		}
+		return queries;
 	}
 	public static void main(String[] argv) {
         System.exit(new AnnotateVariants().instanceMain(argv));
