@@ -57,6 +57,7 @@ public abstract class AsyncReadTaskRunner<T, U> {
     private final BlockingDeque<CompletableFuture<Deque<RecordOrException<T>>>> scheduledTransforms = new LinkedBlockingDeque<>();
     private final int mTotalBatches;
     private final int mBatchBufferBudget;
+    private final Executor mTransformThreadpool;
     private volatile boolean asyncEnabled = true;
     private volatile boolean interruptAsyncTasks = false;
     private volatile boolean eosReached = false;
@@ -68,6 +69,13 @@ public abstract class AsyncReadTaskRunner<T, U> {
      * @param batches number of asynchronous batches
      */
     public AsyncReadTaskRunner(int batchBufferBudget, int batches) {
+        this(batchBufferBudget, batches, null);
+    }
+
+    /**
+     * @param transformThreadpool runs transform() for this instance instead of the shared non-blocking thread pool
+     */
+    public AsyncReadTaskRunner(int batchBufferBudget, int batches, Executor transformThreadpool) {
         if (batchBufferBudget <= 0) {
             throw new IllegalArgumentException("Buffer size must be greater than zero");
         }
@@ -76,6 +84,7 @@ public abstract class AsyncReadTaskRunner<T, U> {
         }
         this.mBatchBufferBudget = batchBufferBudget;
         this.mTotalBatches = batches;
+        this.mTransformThreadpool = transformThreadpool;
     }
 
     /**
@@ -206,7 +215,8 @@ public abstract class AsyncReadTaskRunner<T, U> {
                 readAheadFuture = scheduledReadaheads.getLast().thenApplyAsync((x) -> readNextBatch(), blockingThreadpool);
             }
             scheduledReadaheads.addLast(readAheadFuture);
-            scheduledTransforms.addLast(readAheadFuture.thenApplyAsync(this::processNextBatch, nonblockingThreadpool));
+            scheduledTransforms.addLast(readAheadFuture.thenApplyAsync(this::processNextBatch,
+                    mTransformThreadpool != null ? mTransformThreadpool : nonblockingThreadpool));
             batchesToSchedule--;
         }
     }
