@@ -442,6 +442,16 @@ public class Slice {
      */
     public void normalizeCRAMRecords(final List<CRAMCompressionRecord> cramCompressionRecords,
                                      final CRAMReferenceRegion cramReferenceRegion) {
+        normalizeCRAMRecords(cramCompressionRecords, cramReferenceRegion, new CompressorCache());
+    }
+
+    /**
+     * Ultima fork: decodes the embedded reference block with the caller's compressor cache. A fresh cache per
+     * slice (a new rANS decoder) was 11-17% of the bytes CRAM decode allocates.
+     */
+    public void normalizeCRAMRecords(final List<CRAMCompressionRecord> cramCompressionRecords,
+                                     final CRAMReferenceRegion cramReferenceRegion,
+                                     final CompressorCache compressorCache) {
         boolean hasEmbeddedReference = false;
         if (compressionHeader.isReferenceRequired()) {
             // get the reference bases required for the entire slice and validate the reference MD5
@@ -457,7 +467,7 @@ public class Slice {
             if (embeddedReferenceBlock != null) {
                 hasEmbeddedReference = true;
                 cramReferenceRegion.setEmbeddedReferenceBases(
-                        embeddedReferenceBlock.getUncompressedContent(new CompressorCache()),
+                        embeddedReferenceBlock.getUncompressedContent(compressorCache),
                         getAlignmentContext().getReferenceContext().getReferenceSequenceID(),
                         alignmentContext.getAlignmentStart() - 1);
             }
