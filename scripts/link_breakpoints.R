@@ -348,7 +348,9 @@ if (!is.na(argv$fulloutput)) {
   vcf_chr = as.numeric(gsub("\\D", "", vcf_chr))
   vcf_pos = start(rowRanges(vcf[is.na(info(vcf)$MATEID) & (info(vcf)$LOCAL_LINKED_BY !="")]))
   vcf_alt_orig = rowRanges(vcf[is.na(info(vcf)$MATEID) & (info(vcf)$LOCAL_LINKED_BY !="")])$ALT
-  vcf_alt = rowRanges(vcf[is.na(info(vcf)$MATEID) & (info(vcf)$LOCAL_LINKED_BY !="")])$ALT
+  # A plain list: assigning one element of a CharacterList copies the whole list
+  vcf_alt = as.list(vcf_alt_orig)
+  ref_has_chr = !is.null(refgenome) && grepl("^chr", seqnames(seqinfo(refgenome))[1])
 
   # Keep only the part before the comma if a comma exists
   vcf_linked_by <- str_replace(vcf_linked_by, ",.*$", "")
@@ -371,7 +373,7 @@ if (!is.na(argv$fulloutput)) {
       stopifnot(vcf_chr[indices[1]] == vcf_chr[indices[2]])
       
       # add the relevant part to ALT
-      if (!grepl("^chr", seqnames(seqinfo(refgenome))[1])) {
+      if (!ref_has_chr) {
         vcf_alt[first_pos] = paste0(vcf_alt_orig[[first_pos]], 'NNNNNNNNNN', vcf_alt_orig[[second_pos]], '[', vcf_chr[[second_pos]],':',vcf_pos[[second_pos]],'[')
         vcf_alt[second_pos] = paste0(']', vcf_chr[first_pos],':',vcf_pos[first_pos],']', vcf_alt_orig[[first_pos]], 'NNNNNNNNNN', vcf_alt_orig[[second_pos]])
       
