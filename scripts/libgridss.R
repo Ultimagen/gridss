@@ -917,40 +917,17 @@ read_gridss_breakpoint_pon = function(file) {
   names(grh) = paste0(seq_len(nrow(df)), "h")
   return(c(gro, grh))
 }
-#' takes two lists of lists of the same shape
-#' zips each corresponding element using ZIP_FUN
-#' Then for each original list, applies AGGREGATE_FUN to the result of the zip
-#' ZIP_FUN must be a vectorised function and is applied once
-#' AGGREGATE_FUN is applied once for each non-empty nested list
-#' @return a vector of the same length as the input lists.
-#' If the input list has no elements,
-#' the resultant vector returns NA without applying AGGREGATE_FUN to the empty list
-zip_aggregate_pair_of_list_of_list = function(list1, list2, ZIP_FUN, AGGREGATE_FUN) {
-  if (any(elementNROWS(list1) != elementNROWS(list2))) {
+linked_assemblies <- function(vcf, exclude_breakends_without_local_assembly=TRUE) {
+  beid = info(vcf)$BEID
+  beidl = info(vcf)$BEIDL
+  if (any(elementNROWS(beid) != elementNROWS(beidl))) {
     stop("Lists are not of the same shape")
   }
-  vec1 = unlist(list1)
-  vec2 = unlist(list2)
-  zipped = ZIP_FUN(vec1, vec2)
-  result = rep(NA, length(list1))
-  aggregatedf = data.frame(
-      ordinal = rep(seq_len(length(list1)), times=elementNROWS(list1)),
-      value = zipped) %>%
-    group_by(ordinal) %>%
-    summarise(value = AGGREGATE_FUN(value))
-  result[aggregatedf$ordinal] = aggregatedf$value
-  return(result)
-}
-linked_assemblies <- function(vcf, exclude_breakends_without_local_assembly=TRUE) {
   asm_linked_df <- data.frame(
     sourceId=names(vcf),
     mateid=info(vcf)$MATEID,
     start=start(rowRanges(vcf)),
-    asm=zip_aggregate_pair_of_list_of_list(
-      info(vcf)$BEID,
-      info(vcf)$BEIDL,
-      ZIP_FUN = function(x, y) paste(x, y, sep="/"),
-      AGGREGATE_FUN = function(x) paste(x, collapse=";")),
+    asm=unstrsplit(relist(paste(unlist(beid), unlist(beidl), sep="/"), beid), sep=";"),
     stringsAsFactors = FALSE
   ) %>%
     separate_rows(asm, sep=";") %>%
