@@ -208,28 +208,41 @@ ins_indices <- which(!is.na(info(vcf)$SVTYPE) & info(vcf)$SVTYPE == "INS")
 
 dup_indices <- which(!is.na(info(vcf)$SVTYPE) & info(vcf)$SVTYPE == "DUP")
 
+# Per-variant fields, read once: the VCF accessors rebuild them from the whole VCF on every call
+variant_fields <- list(
+  is_short_del = seq_along(vcf) %in% short_del_indices,
+  short_del_idx = match(seq_along(vcf), short_del_indices),
+  is_del = seq_along(vcf) %in% del_indices,
+  is_ins = seq_along(vcf) %in% ins_indices,
+  is_dup = seq_along(vcf) %in% dup_indices,
+  ref = ref(vcf),
+  alt = alt(vcf),
+  start = start(vcf),
+  svlen = info(vcf)$SVLEN,
+  svtype = info(vcf)$SVTYPE)
+
 # Function to process each variant
-process_variant <- function(i, vcf, short_del_indices, short_del_seqs, short_del_lengths, ins_indices, dup_indices) {
+process_variant <- function(i, v, short_del_seqs, short_del_lengths) {
   result <- list()
   
-  if (i %in% short_del_indices) {
-    del_idx <- which(short_del_indices == i)
+  if (v$is_short_del[i]) {
+    del_idx <- v$short_del_idx[i]
     deletion_length <- short_del_lengths[del_idx]
     
     # Update the REF and ALT fields for short DEL variants
     full_ref_seq <- short_del_seqs[del_idx]
-    result$alt <- as.character(ref(vcf)[i])
+    result$alt <- as.character(v$ref[i])
     result$ref <- DNAString(as.character(full_ref_seq))
-    result$end <- start(vcf)[i] + length(result$ref)
+    result$end <- v$start[i] + length(result$ref)
     
-  } else if (i %in% del_indices && !(i %in% short_del_indices)) {
+  } else if (v$is_del[i] && !v$is_short_del[i]) {
     # Handle long DEL variants
     result$alt <- CharacterList("<DEL>")
-    result$ref <- DNAString(as.character(ref(vcf)[i]))
-    result$end <- start(vcf)[i] - info(vcf)$SVLEN[i]
-  } else if (i %in% ins_indices) {
+    result$ref <- DNAString(as.character(v$ref[i]))
+    result$end <- v$start[i] - v$svlen[i]
+  } else if (v$is_ins[i]) {
     # Update the REF and ALT fields for INS variants
-    alt_field = as.character(alt(vcf)[i])
+    alt_field = as.character(v$alt[i])
     if (grepl('NNNNNNNNNN', alt_field)) {
       result$alt <- CharacterList("<INS>")
       # Extract the part before 'NNNNNNNNNN'
@@ -247,13 +260,13 @@ process_variant <- function(i, vcf, short_del_indices, short_del_seqs, short_del
     } else {
       result$alt <- gsub("\\[(chr){0,1}[0-9XY]+:[0-9]+\\[|\\](chr){0,1}[0-9XY]+:[0-9]+\\]", "", alt_field)
     }
-    result$ref <- DNAString(as.character(ref(vcf)[i]))
-    result$end <- start(vcf)[i] + length(result$ref) - 1
-  } else if(i %in% dup_indices) {
+    result$ref <- DNAString(as.character(v$ref[i]))
+    result$end <- v$start[i] + length(result$ref) - 1
+  } else if(v$is_dup[i]) {
         result$alt <- CharacterList("<DUP:TANDEM>")
-        result$ref <- DNAString(as.character(ref(vcf)[i]))
-        result$end <- start(vcf)[i] + info(vcf)$SVLEN[i]
-  } else if (is.null(info(vcf)$SVTYPE[i])) {
+        result$ref <- DNAString(as.character(v$ref[i]))
+        result$end <- v$start[i] + v$svlen[i]
+  } else if (is.null(v$svtype[i])) {
     print(i)
     stop(paste("I think should not reach here. this code should be deleted", i, "."))
     alt_field <- as.character(alt(vcf)[i])
@@ -282,7 +295,7 @@ write(paste(Sys.time(),"Process sequences on ", num_cores, " cpu"), stderr())
 
 # Process variants in parallel with progress bar using pblapply
 pboptions(type = "txt")
-results <- pblapply(seq_along(vcf), process_variant, vcf = vcf, short_del_indices = short_del_indices, short_del_seqs = short_del_seqs, short_del_lengths = short_del_lengths, ins_indices = ins_indices, dup_indices = dup_indices, cl = num_cores)
+results <- pblapply(seq_along(vcf), process_variant, v = variant_fields, short_del_seqs = short_del_seqs, short_del_lengths = short_del_lengths, cl = num_cores)
 
 # Update the VCF object with results
 
