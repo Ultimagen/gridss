@@ -78,6 +78,7 @@ full_vcf = raw_vcf
 if (argv$gc) { gc() }
 # hard filter unpaired breakpoints (caused by inconsistent scoring across the two breakends)
 full_vcf = full_vcf[is.na(info(full_vcf)$MATEID) | info(full_vcf)$MATEID %in% names(full_vcf)]
+rm(raw_vcf)
 
 full_vcf = align_breakpoints(full_vcf, refgenome = refgenome)
 # Add header fields
