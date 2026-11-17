@@ -183,3 +183,67 @@ def test_ambiguous_base_pattern_matches_the_old_scan():
     for sequence in ["ACGT", "acgtACGT", "ACGNT", "ACGT.", "", "RYK"]:
         old_skip = not all(c in "atgc" for c in sequence.lower())
         assert (alh.AMBIGUOUS_BASE.search(sequence) is not None) == old_skip
+
+
+def write_test_bam(tmp_path, rng):
+    contigs = [("chrA", 150_000), ("chrS1", 2_000), ("chrS2", 3_000), ("chrB", 120_000), ("chrS3", 1_000)]
+    reference = {name: "".join(rng.choice("ACGT") for _ in range(length)) for name, length in contigs}
+    for name in reference:
+        pos = rng.randrange(1_000, len(reference[name]) - 100) if len(reference[name]) > 2_000 else 500
+        reference[name] = reference[name][:pos] + "T" * 14 + reference[name][pos + 14 :]
+    fasta = tmp_path / "ref.fa"
+    fasta.write_text("".join(f">{name}\n{seq}\n" for name, seq in reference.items()))
+    pysam.faidx(str(fasta))
+    header = {"HD": {"VN": "1.6", "SO": "coordinate"}, "SQ": [{"SN": n, "LN": ln} for n, ln in contigs]}
+    reads = []
+    for tid, (name, length) in enumerate(contigs):
+        for i in range(60):
+            start = rng.randrange(0, length - 200)
+            seq = reference[name][start : start + 120]
+            read = pysam.AlignedSegment()
+            read.query_name = f"{name}_{i}"
+            read.reference_id, read.reference_start, read.mapping_quality = tid, start, 60
+            clip = rng.choice([0, 12, 20])
+            seq = "".join(rng.choice("ACGT") for _ in range(clip)) + seq[clip:]
+            if rng.random() < 0.5:
+                seq = seq[:60] + "A" * 13 + seq[73:]
+            read.query_sequence = seq
+            read.cigarstring = f"{clip}S{120 - clip}M" if clip else "120M"
+            read.query_qualities = pysam.qualitystring_to_array("I" * len(seq))
+            reads.append(read)
+    bam = tmp_path / "in.bam"
+    with pysam.AlignmentFile(str(tmp_path / "unsorted.bam"), "wb", header=header) as out:
+        for read in reads:
+            out.write(read)
+    pysam.sort("-o", str(bam), str(tmp_path / "unsorted.bam"))
+    pysam.index(str(bam))
+    return bam, fasta, contigs
+
+
+def serial_merge(bam, fasta, contigs, tmp_path):
+    """The merge before the parallel sort: each large contig realigned and sorted, short contigs copied"""
+    records = []
+    with pysam.AlignmentFile(str(bam)) as source:
+        for name, length in contigs:
+            if length > 100_000:
+                alh.realign_homopolymers(str(bam), str(tmp_path / f"s_{name}.bam"), str(fasta), 10, name, 10)
+                pysam.sort("-o", str(tmp_path / f"s_{name}_sorted.bam"), str(tmp_path / f"s_{name}.bam"))
+                with pysam.AlignmentFile(str(tmp_path / f"s_{name}_sorted.bam")) as part:
+                    records.extend(read.to_string() for read in part)
+            else:
+                records.extend(read.to_string() for read in source.fetch(name))
+    return records
+
+
+def test_main_matches_serial_merge(tmp_path, monkeypatch):
+    bam, fasta, contigs = write_test_bam(tmp_path, random.Random(3))
+    output = tmp_path / "out.bam"
+    monkeypatch.setattr(
+        sys, "argv", ["alh", "--input", str(bam), "--output", str(output), "--reference", str(fasta), "--n_jobs", "2"]
+    )
+    alh.main()
+    with pysam.AlignmentFile(str(output)) as result, pysam.AlignmentFile(str(bam)) as source:
+        assert str(result.header) == str(source.header)
+        records = [read.to_string() for read in result]
+    assert records == serial_merge(bam, fasta, contigs, tmp_path)
+    assert sorted(p.name for p in tmp_path.glob("out.bam*")) == ["out.bam", "out.bam.bai"]

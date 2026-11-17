@@ -6,6 +6,7 @@ import pysam
 import pyfaidx
 import tqdm.auto as tqdm
 import argparse
+import itertools
 import re
 from Bio import Align
 from joblib import Parallel, delayed
@@ -548,6 +549,33 @@ def insert_operation_into_cigar(cigar, position, op_size, start_pos, op_type):
     return updated_cigar, start_pos
 
 
+def realign_and_sort(input_path, part_path, reference_path, homopolymer_length, contig,
+                     min_required_softclip_length):
+    """
+    realign_homopolymers on one contig, then coordinate sort its output into part_path
+    """
+    unsorted_path = f"{part_path}.unsorted.bam"
+    result = realign_homopolymers(input_path, unsorted_path, reference_path, homopolymer_length, contig,
+                                  min_required_softclip_length)
+    pysam.sort("--no-PG", "-o", part_path, unsorted_path)
+    os.remove(unsorted_path)
+    return result
+
+
+def copy_contigs(input_path, part_path, contigs):
+    """
+    Copy the reads of short contigs unchanged; returns the same statistics as realign_homopolymers
+    """
+    count = 0
+    with pysam.AlignmentFile(input_path) as bam:
+        with pysam.AlignmentFile(part_path, mode='wb', header=bam.header) as output:
+            for contig in contigs:
+                for read in bam.fetch(contig):
+                    output.write(read)
+                    count += 1
+    return count, 0, [0, 0, 0, 0]
+
+
 def main():
     parser = argparse.ArgumentParser(description='Find and realign homopolymers in reads.')
     parser.add_argument('--input', required=True, help='The input CRAM file')
@@ -561,61 +589,46 @@ def main():
     MIN_CONTIG_LENGTH = 100000
 
     with pysam.AlignmentFile(args.input, "rc") as cram_file:
-        # Get the list of contig names
-        contigs = cram_file.references
-        # Get the list of contig lengths
-        contig_lengths = cram_file.lengths
-        large_contigs = [
-            contigs[i] for i in range(len(contigs)) if contig_lengths[i] > MIN_CONTIG_LENGTH
-        ]
+        contig_lengths = dict(zip(cram_file.references, cram_file.lengths))
+        contig_reads = {stat.contig: stat.total for stat in cram_file.get_index_statistics()}
 
-        results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
-            delayed(realign_homopolymers)(
-                args.input, f"{args.output}{contig}.bam", args.reference, args.homopolymer_length, contig, args.min_required_softclip_length
-            )
-            for contig in tqdm.tqdm(large_contigs)
-        )
-        total_count = 0
-        total_count_homopolymer = 0
-        total_choices = [0, 0, 0, 0]
-        for count, count_homopolymer, choices in results:
-            total_count += count
-            total_count_homopolymer += count_homopolymer
-            total_choices = [total_choices[i] + choices[i] for i in range(4)]
+    # One part file per large contig and per run of short contigs, in header order; concatenated in that order
+    parts = []
+    for is_large, group in itertools.groupby(contig_lengths, key=lambda c: contig_lengths[c] > MIN_CONTIG_LENGTH):
+        group = list(group)
+        if is_large:
+            parts.extend((f"{args.output}{contig}.bam", [contig], True) for contig in group)
+        else:
+            parts.append((f"{args.output}{group[0]}.short_contigs.bam", group, False))
 
-        # sort and index the contig files
-        for contig in large_contigs:
-            pysam.sort("-o", f"{args.output}{contig}_sorted.bam", f"{args.output}{contig}.bam")
-            pysam.index(f"{args.output}{contig}_sorted.bam")
+    # Largest first, so that no large contig starts last and leaves the other workers idle
+    by_size = sorted(parts, key=lambda part: -sum(contig_reads.get(contig, 0) for contig in part[1]))
+    results = Parallel(n_jobs=args.n_jobs, backend="multiprocessing", max_nbytes=None)(
+        delayed(realign_and_sort)(args.input, part_path, args.reference, args.homopolymer_length, contigs[0],
+                                  args.min_required_softclip_length)
+        if is_large else delayed(copy_contigs)(args.input, part_path, contigs)
+        for part_path, contigs, is_large in tqdm.tqdm(by_size)
+    )
+    total_count = 0
+    total_count_homopolymer = 0
+    total_choices = [0, 0, 0, 0]
+    for count, count_homopolymer, choices in results:
+        total_count += count
+        total_count_homopolymer += count_homopolymer
+        total_choices = [total_choices[i] + choices[i] for i in range(4)]
 
-        # merge the contig files together
-        with pysam.AlignmentFile(args.output, mode='wb', header=cram_file.header) as output:
-            with pysam.AlignmentFile(args.input) as cram:
-                for contig in contigs:
-                    if contig in large_contigs:
-                        with pysam.AlignmentFile(f"{args.output}{contig}_sorted.bam") as contig_file:
-                            for read in contig_file:
-                                output.write(read)
-                    else:
-                        # copy the reads from the original file in case the contig is short
-                        for read in cram.fetch(contig):
-                                output.write(read)
-                                total_count +=1
+    part_paths = [part_path for part_path, _, _ in parts]
+    pysam.cat("--no-PG", "-o", args.output, *part_paths)
+    for part_path in part_paths:
+        os.remove(part_path)
+    pysam.index(args.output)
 
-        # remove the contig files
-        for contig in large_contigs:
-            os.remove(f"{args.output}{contig}.bam")
-            os.remove(f"{args.output}{contig}_sorted.bam")
-            os.remove(f"{args.output}{contig}_sorted.bam.bai")
-
-        pysam.index(args.output)
-
-        logger.info(f"Total reads: {total_count}")
-        logger.info(f"Reads with homopolymers: {total_count_homopolymer}")
-        logger.info(f"Reads where original sequence is better: {total_choices[0]}")
-        logger.info(f"Reads where original sequence is better (local): {total_choices[1]}")
-        logger.info(f"Reads where reverse complement sequence is better: {total_choices[2]}")
-        logger.info(f"Reads where reverse complement sequence is better (local): {total_choices[3]}")
+    logger.info(f"Total reads: {total_count}")
+    logger.info(f"Reads with homopolymers: {total_count_homopolymer}")
+    logger.info(f"Reads where original sequence is better: {total_choices[0]}")
+    logger.info(f"Reads where original sequence is better (local): {total_choices[1]}")
+    logger.info(f"Reads where reverse complement sequence is better: {total_choices[2]}")
+    logger.info(f"Reads where reverse complement sequence is better (local): {total_choices[3]}")
 
 
 if __name__ == "__main__":
