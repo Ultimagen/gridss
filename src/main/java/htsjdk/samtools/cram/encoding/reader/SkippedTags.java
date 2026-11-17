@@ -21,12 +21,6 @@ import java.util.Set;
  * so leaving those blocks compressed and unread changes nothing else in the decode.
  */
 public final class SkippedTags {
-    /**
-     * Transient SAMRecord attribute: the String[] names of the tags decode left out of that record, for readers
-     * that only count tags (CollectTagMetrics). Shared between records, don't modify.
-     */
-    public static final String SKIPPED_TAGS_ATTRIBUTE = "samjdk.cram_skipped_tags";
-
     /** Tag IDs as in {@link htsjdk.samtools.cram.structure.ReadTag#name3BytesToInt(byte[])} */
     final Set<Integer> tagIds = new HashSet<>();
     final Set<Integer> contentIds = new HashSet<>();

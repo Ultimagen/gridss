@@ -330,7 +330,7 @@ public class Container {
                 samRecord.setValidationStringency(validationStringency);
                 final String[] skipped = skippedTags == null ? null : skippedTags[cramCompressionRecord.getTagIdsIndex().value];
                 if (skipped != null && skipped.length > 0) {
-                    samRecord.setTransientAttribute(SkippedTags.SKIPPED_TAGS_ATTRIBUTE, skipped);
+                    samRecord.setCramSkippedTags(skipped);
                 }
                 samRecords.add(samRecord);
             }
