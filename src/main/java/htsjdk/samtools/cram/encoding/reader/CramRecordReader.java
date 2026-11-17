@@ -17,6 +17,7 @@
  */
 package htsjdk.samtools.cram.encoding.reader;
 
+import htsjdk.samtools.Defaults;
 import htsjdk.samtools.SAMFlag;
 import htsjdk.samtools.SAMRecord;
 import htsjdk.samtools.ValidationStringency;
@@ -27,6 +28,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -43,6 +45,7 @@ public final class CramRecordReader {
     private final DataSeriesReader<byte[]> readNameCodec;
     private final DataSeriesReader<Integer> distanceToNextFragmentCodec;
     private final Map<Integer, DataSeriesReader<byte[]>> tagValueCodecs;
+    private final Set<Integer> skippedTagIds;
     private final DataSeriesReader<Integer> numberOfReadFeaturesCodec;
     private final DataSeriesReader<Integer> readFeaturePositionCodec;
     private final DataSeriesReader<Byte> readFeatureCodeCodec;
@@ -86,7 +89,9 @@ public final class CramRecordReader {
         this.slice = slice;
         this.compressionHeader = slice.getCompressionHeader();
         this.validationStringency = validationStringency;
-        this.sliceBlocksReadStreams = new SliceBlocksReadStreams(slice.getSliceBlocks(), compressorCache);
+        final SkippedTags skippedTags = new SkippedTags(compressionHeader, Defaults.CRAM_SKIP_TAGS);
+        this.skippedTagIds = skippedTags.tagIds;
+        this.sliceBlocksReadStreams = new SliceBlocksReadStreams(slice.getSliceBlocks(), compressorCache, skippedTags.contentIds);
 
         bitFlagsCodec =                 createDataSeriesReader(DataSeries.BF_BitFlags);
         compressionBitFlagsCodec =      createDataSeriesReader(DataSeries.CF_CompressionBitFlags);
@@ -129,6 +134,7 @@ public final class CramRecordReader {
 
         tagValueCodecs = compressionHeader.getTagEncodingMap().entrySet()
                 .stream()
+                .filter(mapEntry -> !skippedTagIds.contains(mapEntry.getKey()))
                 .collect(Collectors.toMap(Map.Entry::getKey,
                         mapEntry -> new DataSeriesReader<>(
                                 // consequence/choice for tags
@@ -217,8 +223,14 @@ public final class CramRecordReader {
             for (int i = 0; i < ids.length; i++) {
                 final int id = ReadTag.name3BytesToInt(ids[i]);
                 final DataSeriesReader<byte[]> dataSeriesReader = tagValueCodecs.get(id);
+                if (dataSeriesReader == null && skippedTagIds.contains(id)) {
+                    continue;
+                }
                 final ReadTag tag = new ReadTag(id, dataSeriesReader.readData(), validationStringency);
                 readTags.add(tag);
+            }
+            if (readTags.isEmpty()) {
+                readTags = null; // every tag skipped; CRAMCompressionRecord takes null, not an empty list
             }
         }
 
