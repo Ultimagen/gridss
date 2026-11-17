@@ -273,7 +273,8 @@ def read_is_candidate_for_realign(read: pysam.AlignedSegment, min_required_softc
         return True
     return False
 
-def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10, contig=None, min_required_softclip_length=10):
+def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_length=10, contig=None, min_required_softclip_length=10,
+                         output_mode='wb'):
     """
     Find and realign homopolymers in reads in a CRAM file
     @param cram_path: The input CRAM file
@@ -282,6 +283,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
     @param homopolymer_length: The length of homopolymers to search for
     @param contig: The contig to process
     @param min_required_softclip_length: The minimum required soft clip length in the alignment to attempt realignment
+    @param output_mode: The pysam mode of the output ('wbu' for an uncompressed BAM that is only sorted next)
     """
     # Open the CRAM file
     reference = pyfaidx.Fasta(reference_path, build_index=False)
@@ -302,7 +304,7 @@ def realign_homopolymers(cram_path, output_path, reference_path, homopolymer_len
     choices = [0, 0, 0, 0]
 
     with pysam.AlignmentFile(cram_path) as cram:
-        with pysam.AlignmentFile(output_path, mode='wb', header=cram.header) as output:
+        with pysam.AlignmentFile(output_path, mode=output_mode, header=cram.header) as output:
             # Iterate over the reads in the CRAM file
             for read in cram.fetch(contig):
                 count += 1
@@ -556,7 +558,7 @@ def realign_and_sort(input_path, part_path, reference_path, homopolymer_length, 
     """
     unsorted_path = f"{part_path}.unsorted.bam"
     result = realign_homopolymers(input_path, unsorted_path, reference_path, homopolymer_length, contig,
-                                  min_required_softclip_length)
+                                  min_required_softclip_length, output_mode='wbu')
     pysam.sort("--no-PG", "-o", part_path, unsorted_path)
     os.remove(unsorted_path)
     return result
