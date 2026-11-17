@@ -31,9 +31,11 @@ import htsjdk.samtools.cram.structure.block.Block;
 import htsjdk.utils.ValidationUtils;
 
 import java.io.ByteArrayInputStream;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Provides a layer over a {@link SliceBlocks} object and acts as a bridge between the DataSeries codecs
@@ -51,6 +53,14 @@ public class SliceBlocksReadStreams {
      * @param sliceBlocks {@link SliceBlocks} that have been populated from a CRAM stream
      */
     public SliceBlocksReadStreams(final SliceBlocks sliceBlocks, final CompressorCache compressorCache) {
+        this(sliceBlocks, compressorCache, Collections.emptySet());
+    }
+
+    /**
+     * GRIDSS fork: leaves the external blocks of skippedContentIDs compressed and without a stream
+     */
+    public SliceBlocksReadStreams(final SliceBlocks sliceBlocks, final CompressorCache compressorCache,
+                                  final Set<Integer> skippedContentIDs) {
         ValidationUtils.nonNull(sliceBlocks.getCoreBlock(), "sliceBlocks must have been initialized");
         ValidationUtils.validateArg(sliceBlocks.getNumberOfExternalBlocks() > 0, "sliceBlocks must have been initialized");
 
@@ -63,6 +73,9 @@ public class SliceBlocksReadStreams {
 
         final List<Integer> externalContentIDs = sliceBlocks.getExternalContentIDs();
         for (final Integer contentID : externalContentIDs) {
+            if (skippedContentIDs.contains(contentID)) {
+                continue;
+            }
             final Block block = sliceBlocks.getExternalBlock(contentID);
             externalInputStreams.put(contentID, new ByteArrayInputStream(block.getUncompressedContent(compressorCache)));
         }
