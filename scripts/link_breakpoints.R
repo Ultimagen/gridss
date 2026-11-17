@@ -405,15 +405,7 @@ if (!is.na(argv$fulloutput)) {
     dplyr::filter(sum_qual != 0) %>%
     dplyr::select(sourceId, linked_by)
   # Extract FILTER values for each sourceId in filtered_df from the VCF
-  filtered_df$vcf_filter <- sapply(filtered_df$sourceId, function(id) {
-    # Assuming `row.names(vcf)` or another identifier corresponds to sourceId
-    idx <- match(id, row.names(vcf))
-    if (!is.na(idx)) {
-      return(rowRanges(vcf)$FILTER[idx])
-    } else {
-      return(NA)
-    }
-  })
+  filtered_df$vcf_filter <- rowRanges(vcf)$FILTER[match(filtered_df$sourceId, row.names(vcf))]
 
   # Split the FILTER strings into vectors of individual filters, remove duplicates within each linked_by group, and collapse back to strings
   filtered_df <- filtered_df %>%
@@ -422,18 +414,14 @@ if (!is.na(argv$fulloutput)) {
               .groups = 'drop') %>%
     mutate(vcf_filter = ifelse(vcf_filter %in% c("PASS;cohortMinSize", "cohortMinSize;PASS"), "PASS", vcf_filter))
 
-  # Loop through each linked_by group to update the VCF FILTER values accordingly
-  for (i in 1:nrow(filtered_df)) {
-    linked_by_id <- filtered_df$linked_by[i]
-    filter_value <- filtered_df$vcf_filter[i]
-
-    # Find sourceIds belonging to the current linked_by group
-    source_ids_in_group <- event_link_df$sourceId[event_link_df$linked_by == linked_by_id]
-
-    # Update the FILTER values for these sourceIds in the VCF
-    vcf_idx_to_update <- which(row.names(vcf) %in% source_ids_in_group)
-    VariantAnnotation::fixed(vcf)$FILTER[vcf_idx_to_update]<- filter_value
-  }
+  # Update every group's sourceIds in one assignment; a sourceId in several groups keeps the last group's value
+  group_of <- match(event_link_df$linked_by, filtered_df$linked_by, incomparables = NA)
+  updates <- data.frame(sourceId = event_link_df$sourceId, group = group_of)[!is.na(group_of), ]
+  updates <- updates[order(updates$group), ]
+  updates <- updates[!duplicated(updates$sourceId, fromLast = TRUE), ]
+  vcf_idx_to_update <- which(row.names(vcf) %in% updates$sourceId)
+  VariantAnnotation::fixed(vcf)$FILTER[vcf_idx_to_update] <-
+    filtered_df$vcf_filter[updates$group[match(row.names(vcf)[vcf_idx_to_update], updates$sourceId)]]
   
   writeVcf(vcf, argv$fulloutput, index=TRUE)
 }
