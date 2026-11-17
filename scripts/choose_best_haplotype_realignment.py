@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument('--tie_breaker_idx', type=int, default=None, help='Index of the alignment source to prioritize in case of a tie (e.g. giraffe)')
     parser.add_argument('--overwrite_mapq', type=comma_sep, help="Comma-separated tuple of three values: index of source to overwrite, min_mapq to change, " \
     "value_to_assign. Useful for overwriting low-scale mapping qualities of giraffe")
+    parser.add_argument('--uncompressed', action='store_true', help='Write the output BAM uncompressed, e.g. when it is only sorted next')
     args = parser.parse_args()
     args.alignment_sources = args.alignment_source
     return args
@@ -240,7 +241,7 @@ def run():
     mappings = zip(*(itertools.groupby(map(MappingKey, pysam.AlignmentFile(x, "rb")), lambda x: x.name) for x in args.alignment_sources))
     logger.info("Choosing best alignment per read: start")    
     counters = np.zeros(len(args.alignment_sources))
-    with pysam.AlignmentFile(args.output, "wb", template=pysam.AlignmentFile(args.alignment_sources[0])) as output:
+    with pysam.AlignmentFile(args.output, "wbu" if args.uncompressed else "wb", template=pysam.AlignmentFile(args.alignment_sources[0])) as output:
         for alns in tqdm.tqdm(mappings):
             # check that the read names fetched from each alignment file are the same
             assert [x[0] for x in alns] == [alns[0][0]] * len(alns), "Read names are not equal. The BAMs should contain same reads in the same order"
