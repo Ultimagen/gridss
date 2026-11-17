@@ -235,10 +235,9 @@ def align_and_choose(read, sequence, global_aligner, local_aligner, fa_seq, edit
     choice = 0 if orig_is_global else 1
 
     rev_comp_edited_sequence = str(Seq(edited_sequence).reverse_complement())
-    # The reverse complement score is one of these two, so the original sequence wins (ties included)
-    # without building the reverse complement alignments; this is the common case
-    rev_score_bound = max(alignment_score(fa_seq, rev_comp_edited_sequence, global_aligner),
-                          alignment_score(fa_seq, rev_comp_edited_sequence, local_aligner))
+    # A local score is never below the global one (its end gaps cost <= 0), so it bounds the reverse score;
+    # at or below it the original sequence wins (ties included) without the reverse alignments, the common case
+    rev_score_bound = alignment_score(fa_seq, rev_comp_edited_sequence, local_aligner)
     if score_orig < rev_score_bound:
         score_rev, cigar_rev, start_pos_rev, r_start_rev, rev_is_global = choose_global_or_local(
             fa_seq, rev_comp_edited_sequence, ref_start, sc_length, global_aligner, local_aligner)

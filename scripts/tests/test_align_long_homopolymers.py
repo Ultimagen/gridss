@@ -108,6 +108,15 @@ def test_align_and_choose_matches_four_alignments_on_random_input():
         assert (choice, cigar, start_pos, r_start) == align_and_choose_four_alignments(fa_seq, query), (fa_seq, query)
 
 
+def test_local_score_bounds_the_global_score():
+    rng = random.Random(1)
+    for _ in range(5000):
+        fa_seq = "".join(rng.choice("ACGT") for _ in range(rng.randint(1, 40)))
+        query = "".join(rng.choice([fa_seq[i : i + 5], rng.choice("ACGT") * rng.randint(1, 3)]) for i in range(0, 40, 5))
+        query = query or "A"
+        assert alh.alignment_score(fa_seq, query, LOCAL) >= alh.alignment_score(fa_seq, query, GLOBAL), (fa_seq, query)
+
+
 def remove_long_homopolymers_by_loop(sequence, homopolymer_length):
     """The character loop the regex replaced"""
     i, del_length, edited_sequence, start_end_del_tuples = 0, 0, "", []
