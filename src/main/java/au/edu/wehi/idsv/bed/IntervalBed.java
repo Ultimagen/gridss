@@ -1,6 +1,7 @@
 package au.edu.wehi.idsv.bed;
 
 import au.edu.wehi.idsv.LinearGenomicCoordinate;
+import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeSet;
 import com.google.common.collect.TreeRangeSet;
@@ -16,6 +17,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 /**
@@ -27,6 +29,36 @@ public class IntervalBed {
 	private static final Log log = Log.getInstance(IntervalBed.class);
 	private final LinearGenomicCoordinate linear;
 	private final RangeSet<Long> intervals;
+	// Sorted [start, end) arrays of intervals: a TreeRangeSet lookup boxes and compares Cut objects (15-20% of annotate's reader thread)
+	private volatile Lookup lookup;
+	private static final class Lookup {
+		final long[] start;
+		final long[] end;
+		Lookup(RangeSet<Long> intervals) {
+			int n = intervals.asRanges().size();
+			start = new long[n];
+			end = new long[n];
+			int i = 0;
+			for (Range<Long> r : intervals.asRanges()) {
+				Range<Long> c = r.canonical(DiscreteDomain.longs());
+				start[i] = c.hasLowerBound() ? c.lowerEndpoint() : Long.MIN_VALUE;
+				end[i] = c.hasUpperBound() ? c.upperEndpoint() : Long.MAX_VALUE;
+				i++;
+			}
+		}
+	}
+	private Lookup lookup() {
+		Lookup l = lookup;
+		if (l == null) {
+			synchronized (this) {
+				if (lookup == null) {
+					lookup = new Lookup(intervals);
+				}
+				l = lookup;
+			}
+		}
+		return l;
+	}
 	public int size() {
 		return intervals.asRanges().size();
 	}
@@ -80,9 +112,11 @@ public class IntervalBed {
 	}
 	public synchronized void addInterval(int referenceIndex, int start, int end) {
 		addInterval(linear, intervals, referenceIndex, start, end);
+		lookup = null;
 	}
 	public synchronized void addInterval(QueryInterval qi) {
 		addInterval(linear, intervals, qi.referenceIndex, qi.start, qi.end);
+		lookup = null;
 	}
 	/**
 	 * Determines whether any of the intervals overlap the given interval
@@ -95,8 +129,15 @@ public class IntervalBed {
 		return overlaps(linear.getLinearCoordinate(referenceIndex, start), linear.getLinearCoordinate(referenceIndex, end));
 	}
 	public boolean overlaps(long start, long end) {
-		Range<Long> r = Range.closedOpen(start, end + 1);
-		return overlaps(r);
+		if (end < start) {
+			return overlaps(Range.closedOpen(start, end + 1));
+		}
+		Lookup l = lookup();
+		int i = Arrays.binarySearch(l.start, end);
+		if (i < 0) {
+			i = -i - 2;
+		}
+		return i >= 0 && l.end[i] > start;
 	}
 	public boolean overlaps(Range<Long> interval) {
 		if (interval == null) {
@@ -108,8 +149,9 @@ public class IntervalBed {
 	 * Removes the given set of intervals
 	 * @param toRemove intervals to remove
 	 */
-	public void remove(IntervalBed toRemove) {
+	public synchronized void remove(IntervalBed toRemove) {
 		intervals.removeAll(toRemove.intervals.asRanges());
+		lookup = null;
 	}
 	public void write(File bed, String name) throws IOException {
 		try (BufferedWriter writer = Files.newBufferedWriter(bed.toPath(), StandardCharsets.US_ASCII)) {
