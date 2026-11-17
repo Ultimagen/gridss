@@ -27,7 +27,6 @@ package gridss.analysis;
 import htsjdk.samtools.SAMFileHeader;
 import htsjdk.samtools.SAMRecord;
 import htsjdk.samtools.SAMRecord.SAMTagAndValue;
-import htsjdk.samtools.cram.encoding.reader.SkippedTags;
 import htsjdk.samtools.metrics.MetricsFile;
 import htsjdk.samtools.reference.ReferenceSequence;
 import htsjdk.samtools.util.IOUtil;
@@ -71,7 +70,7 @@ public class CollectTagMetrics extends SinglePassSamProgram {
     	for (SAMTagAndValue attr : rec.getAttributes()) {
     		count(attr.tag);
     	}
-    	String[] skipped = (String[])rec.getTransientAttribute(SkippedTags.SKIPPED_TAGS_ATTRIBUTE);
+    	String[] skipped = rec.getCramSkippedTags();
     	if (skipped != null) {
     		for (String tag : skipped) {
     			count(tag);

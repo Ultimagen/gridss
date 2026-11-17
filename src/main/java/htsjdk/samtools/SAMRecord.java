@@ -212,6 +212,9 @@ public class SAMRecord implements HtsRecord, Cloneable, Locatable, Serializable 
     /** Transient Map of attributes for use by anyone. */
     private transient Map<Object,Object> transientAttributes;
 
+    /** GRIDSS fork: see {@link #getCramSkippedTags()} */
+    private transient String[] mCramSkippedTags;
+
     public SAMRecord(final SAMFileHeader header) {
         mHeader = header;
     }
@@ -2424,6 +2427,18 @@ public class SAMRecord implements HtsRecord, Cloneable, Locatable, Serializable 
      * @returns a set of SAMFlag associated to this sam record */
     public final Set<SAMFlag> getSAMFlags() {
         return SAMFlag.getFlags(this.getFlags());
+    }
+
+    /**
+     * GRIDSS fork: names of the tags CRAM decode left out of this record (samjdk.cram_skip_tags), for readers that
+     * only count tags. A field, not a transient attribute: a map per record cost annotate 6% CPU. Shared, don't modify.
+     */
+    public String[] getCramSkippedTags() {
+        return mCramSkippedTags;
+    }
+
+    public void setCramSkippedTags(final String[] tags) {
+        mCramSkippedTags = tags;
     }
 
     /**
