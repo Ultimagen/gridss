@@ -25,6 +25,7 @@ import htsjdk.samtools.cram.build.CRAMReferenceRegion;
 import htsjdk.samtools.cram.build.CramIO;
 import htsjdk.samtools.cram.common.CRAMVersion;
 import htsjdk.samtools.cram.common.CramVersions;
+import htsjdk.samtools.cram.encoding.reader.SkippedTags;
 import htsjdk.samtools.cram.io.InputStreamUtils;
 import htsjdk.samtools.cram.ref.ReferenceContext;
 import htsjdk.samtools.cram.structure.block.Block;
@@ -316,6 +317,7 @@ public class Container {
             final CompressorCache compressorCache,
             final SAMFileHeader samFileHeader) {
         final List<SAMRecord> samRecords = new ArrayList<>(getContainerHeader().getNumberOfRecords());
+        final String[][] skippedTags = SkippedTags.namesByTagIdList(getCompressionHeader(), Defaults.CRAM_SKIP_TAGS);
         for (final Slice slice : getSlices()) {
             final List<CRAMCompressionRecord> cramCompressionRecords = slice.deserializeCRAMRecords(compressorCache, validationStringency);
             // before we convert to SAMRecord, we need to normalize the CRAMCompressionRecord in each Slice
@@ -326,6 +328,10 @@ public class Container {
             for (final CRAMCompressionRecord cramCompressionRecord : cramCompressionRecords) {
                 final SAMRecord samRecord = cramCompressionRecord.toSAMRecord(samFileHeader);
                 samRecord.setValidationStringency(validationStringency);
+                final String[] skipped = skippedTags == null ? null : skippedTags[cramCompressionRecord.getTagIdsIndex().value];
+                if (skipped != null && skipped.length > 0) {
+                    samRecord.setTransientAttribute(SkippedTags.SKIPPED_TAGS_ATTRIBUTE, skipped);
+                }
                 samRecords.add(samRecord);
             }
         }
