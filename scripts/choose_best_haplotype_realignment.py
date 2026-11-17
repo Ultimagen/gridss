@@ -148,8 +148,8 @@ def compare_read_mappings(first: list, second: list, mq_threshold: int, idx1:int
     int
         1 if first > second, -1 if second > first, 0 if equal
     '''
-    first_poor_mq = _poor_mq_has_sa(first, mq_threshold) or np.any([x.poor_sa(mq_threshold) for x in first])
-    second_poor_mq = _poor_mq_has_sa(second, mq_threshold) or np.any([x.poor_sa(mq_threshold) for x in second])
+    first_poor_mq = _poor_mq_has_sa(first, mq_threshold) or any(x.poor_sa(mq_threshold) for x in first)
+    second_poor_mq = _poor_mq_has_sa(second, mq_threshold) or any(x.poor_sa(mq_threshold) for x in second)
     if not first_poor_mq and second_poor_mq:
         return 1
     if first_poor_mq and not second_poor_mq:
