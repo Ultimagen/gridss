@@ -27,6 +27,7 @@ package gridss.analysis;
 import htsjdk.samtools.SAMFileHeader;
 import htsjdk.samtools.SAMRecord;
 import htsjdk.samtools.SAMRecord.SAMTagAndValue;
+import htsjdk.samtools.cram.encoding.reader.SkippedTags;
 import htsjdk.samtools.metrics.MetricsFile;
 import htsjdk.samtools.reference.ReferenceSequence;
 import htsjdk.samtools.util.IOUtil;
@@ -68,17 +69,25 @@ public class CollectTagMetrics extends SinglePassSamProgram {
     protected void acceptRead(final SAMRecord rec, final ReferenceSequence ref) {
     	if (rec.getDuplicateReadFlag() && !INCLUDE_DUPLICATES) return;
     	for (SAMTagAndValue attr : rec.getAttributes()) {
-    		String tag = attr.tag;
-    		TagSummaryMetrics metric = tags.get(tag);
-    		if (metric == null) {
-    			metric = new TagSummaryMetrics();
-    			metric.TAG = tag;
-    			metric.COUNT = 0;
-    			tags.put(tag, metric);
-    		}
-    		metric.COUNT++;
-    		
+    		count(attr.tag);
     	}
+    	String[] skipped = (String[])rec.getTransientAttribute(SkippedTags.SKIPPED_TAGS_ATTRIBUTE);
+    	if (skipped != null) {
+    		for (String tag : skipped) {
+    			count(tag);
+    		}
+    	}
+    }
+
+    private void count(String tag) {
+    	TagSummaryMetrics metric = tags.get(tag);
+    	if (metric == null) {
+    		metric = new TagSummaryMetrics();
+    		metric.TAG = tag;
+    		metric.COUNT = 0;
+    		tags.put(tag, metric);
+    	}
+    	metric.COUNT++;
     }
     
     @Override

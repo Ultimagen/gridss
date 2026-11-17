@@ -5,8 +5,10 @@ import htsjdk.samtools.cram.structure.CompressionHeader;
 import htsjdk.samtools.cram.structure.DataSeries;
 import htsjdk.samtools.cram.structure.EncodingDescriptor;
 import htsjdk.samtools.cram.structure.EncodingID;
+import htsjdk.samtools.cram.structure.ReadTag;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -18,7 +20,13 @@ import java.util.Set;
  * A tag is skipped only if all its data sits in external blocks that no other data series or kept tag reads,
  * so leaving those blocks compressed and unread changes nothing else in the decode.
  */
-final class SkippedTags {
+public final class SkippedTags {
+    /**
+     * Transient SAMRecord attribute: the String[] names of the tags decode left out of that record, for readers
+     * that only count tags (CollectTagMetrics). Shared between records, don't modify.
+     */
+    public static final String SKIPPED_TAGS_ATTRIBUTE = "samjdk.cram_skipped_tags";
+
     /** Tag IDs as in {@link htsjdk.samtools.cram.structure.ReadTag#name3BytesToInt(byte[])} */
     final Set<Integer> tagIds = new HashSet<>();
     final Set<Integer> contentIds = new HashSet<>();
@@ -50,6 +58,26 @@ final class SkippedTags {
                 contentIds.addAll(c.getValue());
             }
         }
+    }
+
+    /**
+     * @return for each tag ID list of the header's dictionary, the names of its skipped tags; null if none is skipped
+     */
+    public static String[][] namesByTagIdList(final CompressionHeader header, final Set<String> names) {
+        final Set<Integer> skipped = new SkippedTags(header, names).tagIds;
+        if (skipped.isEmpty()) {
+            return null;
+        }
+        final byte[][][] dictionary = header.getTagIDDictionary();
+        final String[][] byList = new String[dictionary.length][];
+        for (int i = 0; i < dictionary.length; i++) {
+            byList[i] = Arrays.stream(dictionary[i])
+                    .map(ReadTag::name3BytesToInt)
+                    .filter(skipped::contains)
+                    .map(SkippedTags::tagName)
+                    .toArray(String[]::new);
+        }
+        return byList;
     }
 
     static String tagName(final int tagId) {
