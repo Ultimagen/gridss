@@ -956,9 +956,11 @@ linked_assemblies <- function(vcf, exclude_breakends_without_local_assembly=TRUE
     separate_rows(asm, sep=";") %>%
     filter(asm != "")
 
-  asm_paired_df = .linked_assemblies_fix_indels(asm_linked_df)
+  # fix_breakends starts again from asm_linked_df, so the fix_indels result was always discarded
   if (exclude_breakends_without_local_assembly) {
     asm_paired_df = .linked_assemblies_fix_breakends(vcf, asm_linked_df)
+  } else {
+    asm_paired_df = .linked_assemblies_fix_indels(asm_linked_df)
   }
   asm_paired_df = asm_paired_df %>%
     dplyr::select(sourceId, linked_by=asm) %>%
