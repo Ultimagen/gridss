@@ -221,6 +221,10 @@ variant_fields <- list(
   svlen = info(vcf)$SVLEN,
   svtype = info(vcf)$SVTYPE)
 
+del_alt <- CharacterList("<DEL>")
+ins_alt <- CharacterList("<INS>")
+dup_alt <- CharacterList("<DUP:TANDEM>")
+
 # Function to process each variant
 process_variant <- function(i, v, short_del_seqs, short_del_lengths) {
   result <- list()
@@ -237,14 +241,14 @@ process_variant <- function(i, v, short_del_seqs, short_del_lengths) {
     
   } else if (v$is_del[i] && !v$is_short_del[i]) {
     # Handle long DEL variants
-    result$alt <- CharacterList("<DEL>")
+    result$alt <- del_alt
     result$ref <- DNAString(as.character(v$ref[i]))
     result$end <- v$start[i] - v$svlen[i]
   } else if (v$is_ins[i]) {
     # Update the REF and ALT fields for INS variants
     alt_field = as.character(v$alt[i])
     if (grepl('NNNNNNNNNN', alt_field)) {
-      result$alt <- CharacterList("<INS>")
+      result$alt <- ins_alt
       # Extract the part before 'NNNNNNNNNN'
       left_part <- sub('NNNNNNNNNN.*', '', alt_field)
       left_part <- sub('\\.$', '', left_part)
@@ -263,7 +267,7 @@ process_variant <- function(i, v, short_del_seqs, short_del_lengths) {
     result$ref <- DNAString(as.character(v$ref[i]))
     result$end <- v$start[i] + length(result$ref) - 1
   } else if(v$is_dup[i]) {
-        result$alt <- CharacterList("<DUP:TANDEM>")
+        result$alt <- dup_alt
         result$ref <- DNAString(as.character(v$ref[i]))
         result$end <- v$start[i] + v$svlen[i]
   } else if (is.null(v$svtype[i])) {
