@@ -33,6 +33,19 @@ public class SAMRecordReferenceIndexTest {
     }
 
     @Test
+    public void indexSettersReplaceAPreviouslyReadIndex() {
+        final SAMRecord r = new SAMRecord(header());
+        r.setReferenceIndex(0);
+        r.setMateReferenceIndex(0);
+        Assert.assertEquals(0, r.getReferenceIndex().intValue());
+        Assert.assertEquals(0, r.getMateReferenceIndex().intValue());
+        r.setReferenceIndex(1);
+        r.setMateReferenceIndex(2);
+        Assert.assertEquals(1, r.getReferenceIndex().intValue());
+        Assert.assertEquals(2, r.getMateReferenceIndex().intValue());
+    }
+
+    @Test
     public void unknownIndexThrows() {
         final SAMRecord r = new SAMRecord(header());
         Assert.assertThrows(IllegalArgumentException.class, () -> r.setReferenceIndex(3));
