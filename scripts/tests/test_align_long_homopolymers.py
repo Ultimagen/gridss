@@ -171,6 +171,11 @@ def test_cigar_may_change(cigar, expected):
     assert alh.cigar_may_change(alh.cigar_string_to_cigartuples(cigar)) == expected
 
 
+def test_cigar_may_change_on_tuples_the_string_parser_cannot_produce():
+    assert alh.cigar_may_change([])
+    assert alh.cigar_may_change([(0, 10), (9, 5), (0, 10)])
+
+
 def test_cigar_may_change_false_only_when_adjust_is_a_no_op():
     rng = random.Random(0)
     for _ in range(2000):
