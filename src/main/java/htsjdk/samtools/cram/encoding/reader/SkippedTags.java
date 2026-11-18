@@ -75,7 +75,7 @@ public final class SkippedTags {
     }
 
     static String tagName(final int tagId) {
-        return new String(new char[] { (char) ((tagId >> 16) & 0xFF), (char) ((tagId >> 8) & 0xFF) });
+        return ReadTag.intToNameType3Bytes(tagId).substring(0, 2);
     }
 
     /**
