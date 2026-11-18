@@ -5,6 +5,7 @@ import htsjdk.samtools.SAMFileHeader;
 import htsjdk.samtools.SAMReadGroupRecord;
 import htsjdk.samtools.SAMRecord;
 import htsjdk.samtools.cram.build.CramContainerIterator;
+import htsjdk.samtools.cram.io.ITF8;
 import htsjdk.samtools.cram.ref.ReferenceSource;
 import htsjdk.samtools.cram.structure.CRAMEncodingStrategy;
 import htsjdk.samtools.cram.structure.CompressionHeader;
@@ -20,6 +21,7 @@ import org.junit.Test;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -90,6 +92,50 @@ public class SkippedTagsTest {
         final EncodingDescriptor t0 = header.getTagEncodingMap().get(tagId("t0", 'Z'));
         header.getTagEncodingMap().put(tagId("xx", 'Z'), t0);
         final SkippedTags skipped = new SkippedTags(header, new HashSet<>(Arrays.asList("t0")));
+        Assert.assertTrue(skipped.tagIds.isEmpty());
+    }
+
+    @Test
+    public void keeps_a_tag_whose_block_a_data_series_reads() {
+        final CompressionHeader header = writeAndReadHeader();
+        final DataSeries external = Arrays.stream(DataSeries.values())
+                .filter(s -> {
+                    final EncodingDescriptor d = header.getEncodingMap().getEncodingDescriptorForDataSeries(s);
+                    return d != null && d.getEncodingID() == EncodingID.EXTERNAL;
+                })
+                .findFirst().get();
+        header.getTagEncodingMap().put(tagId("t0", 'Z'),
+                new EncodingDescriptor(EncodingID.EXTERNAL, ITF8.writeUnsignedITF8(external.getExternalBlockContentId())));
+        final SkippedTags skipped = new SkippedTags(header, new HashSet<>(Arrays.asList("t0")));
+        Assert.assertTrue(skipped.tagIds.isEmpty());
+    }
+
+    @Test
+    public void keeps_an_array_tag_whose_lengths_read_the_core_block() {
+        final CompressionHeader header = writeAndReadHeader();
+        final int tp = tagId("tp", 'B');
+        final EncodingDescriptor original = header.getTagEncodingMap().get(tp);
+        Assert.assertEquals(EncodingID.BYTE_ARRAY_LEN, original.getEncodingID());
+        final ByteBuffer params = ByteBuffer.wrap(original.getEncodingParameters());
+        params.get();
+        final int lengthsSize = ITF8.readUnsignedITF8(params);
+        params.position(params.position() + lengthsSize);
+        final byte[] values = new byte[params.remaining()];
+        params.get(values);
+        // one symbol (3) with a 1-bit code: the lengths come from the core block
+        final ByteArrayOutputStream huffman = new ByteArrayOutputStream();
+        for (final int v : new int[] { 1, 3, 1, 1 }) {
+            final byte[] itf8 = ITF8.writeUnsignedITF8(v);
+            huffman.write(itf8, 0, itf8.length);
+        }
+        final ByteArrayOutputStream lenEncoding = new ByteArrayOutputStream();
+        lenEncoding.write(EncodingID.HUFFMAN.getId());
+        final byte[] huffmanLength = ITF8.writeUnsignedITF8(huffman.size());
+        lenEncoding.write(huffmanLength, 0, huffmanLength.length);
+        lenEncoding.write(huffman.toByteArray(), 0, huffman.size());
+        lenEncoding.write(values, 0, values.length);
+        header.getTagEncodingMap().put(tp, new EncodingDescriptor(EncodingID.BYTE_ARRAY_LEN, lenEncoding.toByteArray()));
+        final SkippedTags skipped = new SkippedTags(header, new HashSet<>(Arrays.asList("tp")));
         Assert.assertTrue(skipped.tagIds.isEmpty());
     }
 }
