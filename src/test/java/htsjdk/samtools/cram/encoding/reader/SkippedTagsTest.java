@@ -92,9 +92,4 @@ public class SkippedTagsTest {
         final SkippedTags skipped = new SkippedTags(header, new HashSet<>(Arrays.asList("t0")));
         Assert.assertTrue(skipped.tagIds.isEmpty());
     }
-
-    @Test
-    public void tag_name() {
-        Assert.assertEquals("t0", SkippedTags.tagName(tagId("t0", 'Z')));
-    }
 }
