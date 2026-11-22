@@ -34,7 +34,9 @@ FROM gridss_c_build_environment AS gridss_builder_c
 RUN mkdir /opt/gridss/
 COPY src/main/c /opt/gridss/src/main/c
 COPY src/test/resources /opt/gridss/src/test/resources
+# The build context has no submodule .git, so htslib's Makefile can't generate the htscodecs version header
 RUN cd /opt/gridss/src/main/c/gridsstools/htslib && \
+	{ test -e htscodecs/htscodecs/version.h || echo '#define HTSCODECS_VERSION_TEXT "1.1.1"' > htscodecs/htscodecs/version.h; } && \
 	autoreconf -i && ./configure && make -j 8 && \
 	cd .. && \
 	autoreconf -i && ./configure && make -j 8 && \
