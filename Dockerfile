@@ -35,6 +35,9 @@ RUN mkdir /opt/gridss/
 COPY src/main/c /opt/gridss/src/main/c
 COPY src/test/resources /opt/gridss/src/test/resources
 RUN cd /opt/gridss/src/main/c/gridsstools/htslib && \
+	cd htscodecs && \
+	autoreconf -i && ./configure && make -C htscodecs version.h && \
+	cd .. && \
 	autoreconf -i && ./configure && make -j 8 && \
 	cd .. && \
 	autoreconf -i && ./configure && make -j 8 && \
