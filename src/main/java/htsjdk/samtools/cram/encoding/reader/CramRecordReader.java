@@ -323,7 +323,7 @@ public final class CramRecordReader {
             }
         }
 
-        return new CRAMCompressionRecord(
+        final CRAMCompressionRecord record = new CRAMCompressionRecord(
                 sequentialIndex,
                 bamFlags,
                 cramFlags,
@@ -342,6 +342,9 @@ public final class CramRecordReader {
                 mateSequenceID,
                 mateAlignmentStart,
                 recordsToNextFragment);
+        // GRIDSS fork: kept so Container can name the tags skipped for this record
+        record.getTagIdsIndex().value = tagIdList;
+        return record;
     }
 
     private <T> DataSeriesReader<T> createDataSeriesReader(final DataSeries dataSeries) {
