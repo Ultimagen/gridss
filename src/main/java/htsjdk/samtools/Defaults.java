@@ -3,10 +3,13 @@ package htsjdk.samtools;
 import htsjdk.samtools.util.Log;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * Embodies defaults for global values that affect how the SAM JDK operates. Defaults are encoded in the class
@@ -57,6 +60,12 @@ public class Defaults {
      * Bounds the memory used by decoded records. Default = 2 * CRAM_DECODE_THREADS.
      */
     public static final int CRAM_DECODE_DEPTH;
+
+    /**
+     * Comma-separated two-letter tags that CRAM decode leaves out of the records, without decompressing their blocks,
+     * where a tag's data has blocks of its own. Only for readers that never use these tags. Default = none.
+     */
+    public static final Set<String> CRAM_SKIP_TAGS;
 
     /** Compression level to be used for writing BAM and other block-compressed outputs.  Default = 5. */
     public static final int COMPRESSION_LEVEL;
@@ -141,6 +150,8 @@ public class Defaults {
         ASYNC_READ_COMPUTATIONAL_THREADS = getIntProperty("async_io_read_threads", Runtime.getRuntime().availableProcessors());
         CRAM_DECODE_THREADS = getIntProperty("cram_decode_threads", 0);
         CRAM_DECODE_DEPTH = getIntProperty("cram_decode_depth", 2 * CRAM_DECODE_THREADS);
+        CRAM_SKIP_TAGS = Arrays.stream(getStringProperty("cram_skip_tags", "").split(","))
+                .map(String::trim).filter(t -> !t.isEmpty()).collect(Collectors.collectingAndThen(Collectors.toSet(), Collections::unmodifiableSet));
         COMPRESSION_LEVEL = getIntProperty("compression_level", 5);
         DEFAULT_SAM_EXTENSION = getStringProperty("default_sam_type", "bam");
         DEFAULT_VCF_EXTENSION = getStringProperty("default_vcf_type", "vcf");
