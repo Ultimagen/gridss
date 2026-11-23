@@ -47,6 +47,7 @@ public class SAMEvidenceSource extends EvidenceSource {
 	private final Double rpcConcordantPercentage;
 	private IdsvSamFileMetrics metrics;
 	private ReadPairConcordanceCalculator rpcc;
+	private volatile CoverageReadTee coverageReadTee;
 	public enum EvidenceSortOrder {
 		SAMRecordStartPosition,
 		EvidenceStartPosition
@@ -259,6 +260,15 @@ public class SAMEvidenceSource extends EvidenceSource {
 		return it;
 	}
 	public CloseableIterator<DirectedEvidence> iterator(EvidenceSortOrder eso) {
+		CoverageReadTee tee = coverageReadTee;
+		CloseableIterator<SAMRecord> shared = tee == null ? null : tee.claimEvidenceIterator();
+		if (shared != null) {
+			Iterator<DirectedEvidence> eit = asEvidence(shared, eso);
+			if (Defaults.SANITY_CHECK_DUMP_ITERATORS) {
+				eit = new AutoClosingIterator<>(new DebugSpammingIterator<>(eit, "SAMEvidenceSource.iterator()"));
+			}
+			return new AutoClosingIterator<>(eit, shared);
+		}
 		SamReader reader = getReader();
 		SAMRecordIterator it = reader.iterator();
 		it.assertSorted(SortOrder.coordinate);
@@ -269,9 +279,30 @@ public class SAMEvidenceSource extends EvidenceSource {
 		return new AutoClosingIterator<>(eit, reader, it);
 	}
 	protected SamReader getReader() {
+		return getProcessContext().getSamReader(getReaderFile());
+	}
+	private File getReaderFile() {
 		File svFile = getSVFile();
-		SamReader reader = getProcessContext().getSamReader(svFile.exists() ? svFile : getFile());
-		return reader;
+		return svFile.exists() ? svFile : getFile();
+	}
+	/**
+	 * Makes the next {@link #iterator(EvidenceSortOrder)} share its decode with a
+	 * {@link SequentialReferenceCoverageLookup} of this source.
+	 * @return the shared decode, or null if the evidence reads a different file than the coverage lookup
+	 */
+	public CoverageReadTee shareDecodeWithCoverage(int maxCoverageBuffered, int maxEvidencePending) {
+		if (getFile() == null || !getReaderFile().equals(getFile())) return null;
+		coverageReadTee = new CoverageReadTee(getFile().getName(),
+				this::getReader,
+				() -> SamReaderFactory.makeDefault().referenceSequence(getContext().getReferenceFile()).open(getFile()),
+				getReadPairConcordanceCalculator(),
+				getContext().isFilterDuplicates(),
+				maxCoverageBuffered,
+				maxEvidencePending);
+		return coverageReadTee;
+	}
+	public CoverageReadTee getCoverageReadTee() {
+		return coverageReadTee;
 	}
 
 	public File getSVFile() {
