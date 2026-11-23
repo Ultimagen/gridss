@@ -2,12 +2,15 @@ package au.edu.wehi.idsv.bed;
 
 import au.edu.wehi.idsv.TestHelper;
 import htsjdk.samtools.QueryInterval;
+import com.google.common.collect.Range;
+import com.google.common.collect.RangeSet;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Random;
 
 import static org.junit.Assert.*;
 
@@ -114,6 +117,37 @@ public class IntervalBedTest extends TestHelper {
 			assertEquals(qi[i].referenceIndex, result[i].referenceIndex);
 			assertEquals(qi[i].start, result[i].start);
 			assertEquals(qi[i].end, result[i].end);
+		}
+	}
+	@Test
+	public void overlaps_should_see_intervals_added_or_removed_after_a_lookup() {
+		IntervalBed bed = new IntervalBed(getContext().getLinear());
+		assertFalse(bed.overlaps(1, 4, 4));
+		bed.addInterval(1, 3, 5);
+		assertTrue(bed.overlaps(1, 4, 4));
+		bed.addInterval(new QueryInterval(1, 20, 30));
+		assertTrue(bed.overlaps(1, 25, 25));
+		IntervalBed toRemove = new IntervalBed(getContext().getLinear());
+		toRemove.addInterval(1, 1, 10);
+		bed.remove(toRemove);
+		assertFalse(bed.overlaps(1, 4, 4));
+		assertTrue(bed.overlaps(1, 25, 25));
+	}
+	@Test
+	public void overlaps_should_match_range_set_intersection() {
+		Random random = new Random(7);
+		for (int trial = 0; trial < 50; trial++) {
+			IntervalBed bed = new IntervalBed(getContext().getLinear());
+			for (int i = random.nextInt(20); i > 0; i--) {
+				int start = 1 + random.nextInt(9000);
+				bed.addInterval(random.nextInt(3), start, start + random.nextInt(300));
+			}
+			RangeSet<Long> expected = bed.asRangeSet();
+			for (int q = 0; q < 2000; q++) {
+				long start = random.nextInt(30000);
+				long end = start - 1 + random.nextInt(400);
+				assertEquals(expected.intersects(Range.closedOpen(start, end + 1)), bed.overlaps(start, end));
+			}
 		}
 	}
 }
